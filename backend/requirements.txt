@@ -1,0 +1,12 @@
+Flask
+Flask-Blueprint
+Flask-MySQLdb
+Flask-JWT-Extended
+Flask-Migrate
+Flask-SQLAlchemy
+Flask-Cors
+Werkzeug
+requests
+Flask-Limiter
+python-dotenv
+PyJWT 
