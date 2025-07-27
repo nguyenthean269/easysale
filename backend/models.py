@@ -31,6 +31,27 @@ class User(db.Model):
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
         }
 
+class Category(db.Model):
+    __tablename__ = 'categories'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(100), nullable=False)
+    description = db.Column(db.Text)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    documents = db.relationship('Document', backref='category')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'description': self.description,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
 class LinkCrawl(db.Model):
     __tablename__ = 'link_crawls'
     
@@ -54,4 +75,52 @@ class LinkCrawl(db.Model):
             'user_id': self.user_id,
             'started_at': self.started_at.isoformat() if self.started_at else None,
             'done_at': self.done_at.isoformat() if self.done_at else None
-        } 
+        }
+
+class Document(db.Model):
+    __tablename__ = 'documents'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    category_id = db.Column(db.Integer, db.ForeignKey('categories.id'), nullable=False)
+    title = db.Column(db.String(255), nullable=False)
+    source_type = db.Column(db.String(50), nullable=False)  # 'web', 'file', etc.
+    source_path = db.Column(db.String(500), nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    user = db.relationship('User', backref='documents')
+    chunks = db.relationship('DocumentChunk', backref='document', cascade='all, delete-orphan')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'user_id': self.user_id,
+            'category_id': self.category_id,
+            'title': self.title,
+            'source_type': self.source_type,
+            'source_path': self.source_path,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class DocumentChunk(db.Model):
+    __tablename__ = 'document_chunks'
+    
+    id = db.Column(db.Integer, primary_key=True)
+    document_id = db.Column(db.Integer, db.ForeignKey('documents.id'), nullable=False)
+    chunk_index = db.Column(db.Integer, nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    milvus_id = db.Column(db.String(100), nullable=True)  # ID của vector trong Milvus
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'document_id': self.document_id,
+            'chunk_index': self.chunk_index,
+            'content': self.content,
+            'milvus_id': self.milvus_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }

@@ -45,6 +45,15 @@ class Config:
     # Firecrawl API Configuration
     FIRECRAWL_API_KEY = os.getenv('FIRECRAWL_API_KEY', '')
     FIRECRAWL_API_URL = os.getenv('FIRECRAWL_API_URL', 'https://api.firecrawl.dev/scrape')
+    
+    # Milvus Configuration
+    MILVUS_HOST = os.getenv('MILVUS_HOST', 'localhost')
+    MILVUS_PORT = os.getenv('MILVUS_PORT', '19530')
+    MILVUS_COLLECTION_NAME = os.getenv('MILVUS_COLLECTION_NAME', 'document_chunks')
+    MILVUS_DIMENSION = int(os.getenv('MILVUS_DIMENSION', '768'))  # Dimension của embedding vector
+    
+    # Embedding Model Configuration
+    EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
 
 class DevelopmentConfig(Config):
     """Development configuration"""

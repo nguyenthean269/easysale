@@ -10,3 +10,7 @@ requests
 Flask-Limiter
 python-dotenv
 PyJWT 
+langchain_groq
+pymilvus
+sentence-transformers
+numpy

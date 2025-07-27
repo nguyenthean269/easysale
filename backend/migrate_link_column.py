@@ -1,41 +1,59 @@
 #!/usr/bin/env python3
 """
-Script để migrate cột link từ int sang string
+Migration script to add milvus_id column to document_chunks table
 """
 
-from app import app
+import MySQLdb
+import os
+from dotenv import load_dotenv
 
-def migrate_link_column():
-    """Migrate cột link từ int sang string"""
-    print("🔄 Migrating link column from int to string...")
+# Load environment variables
+load_dotenv()
+
+def migrate_milvus_id():
+    """Add milvus_id column to document_chunks table"""
+    try:
+        # Database configuration from environment variables
+        db_config = {
+            'host': os.getenv('DB_HOST', 'localhost'),
+            'port': int(os.getenv('DB_PORT', '3306')),
+            'user': os.getenv('DB_USER', 'root'),
+            'passwd': os.getenv('DB_PASSWORD', ''),
+            'db': os.getenv('DB_NAME', 'easysale_db'),
+            'charset': 'utf8mb4'
+        }
+        
+        # Connect to database
+        conn = MySQLdb.connect(**db_config)
+        cursor = conn.cursor()
+        
+        print("Connected to database successfully")
+        
+        # Check if milvus_id column exists
+        cursor.execute("SHOW COLUMNS FROM document_chunks LIKE 'milvus_id'")
+        column_exists = cursor.fetchone()
+        
+        if column_exists:
+            print("✅ Column 'milvus_id' already exists in document_chunks table")
+        else:
+            # Add milvus_id column
+            cursor.execute("""
+                ALTER TABLE document_chunks 
+                ADD COLUMN milvus_id VARCHAR(100) NULL 
+                COMMENT 'ID of vector in Milvus'
+            """)
+            conn.commit()
+            print("✅ Added 'milvus_id' column to document_chunks table")
+        
+        cursor.close()
+        conn.close()
+        print("Migration completed successfully")
+        
+    except Exception as e:
+        print(f"❌ Migration failed: {e}")
+        return False
     
-    with app.app_context():
-        try:
-            # Thay đổi kiểu dữ liệu của cột link
-            sql = "ALTER TABLE link_crawls MODIFY COLUMN link VARCHAR(500) NOT NULL"
-            with app.db.engine.connect() as conn:
-                conn.execute(app.db.text(sql))
-                conn.commit()
-            print("✅ Successfully migrated link column to VARCHAR(500)")
-            
-            # Kiểm tra cấu trúc bảng
-            with app.db.engine.connect() as conn:
-                result = conn.execute(app.db.text("DESCRIBE link_crawls"))
-                print("\n📋 Table structure after migration:")
-                for row in result:
-                    print(f"  {row[0]}: {row[1]}")
-                
-            return True
-            
-        except Exception as e:
-            print(f"❌ Error during migration: {str(e)}")
-            return False
+    return True
 
 if __name__ == "__main__":
-    print("🚀 Starting link column migration...")
-    success = migrate_link_column()
-    
-    if success:
-        print("\n🎉 Migration completed successfully!")
-    else:
-        print("\n❌ Migration failed!") 
+    migrate_milvus_id() 

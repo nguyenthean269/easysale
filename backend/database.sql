@@ -30,6 +30,19 @@ INSERT INTO users (username, password, email, full_name, role) VALUES
 INSERT INTO users (username, password, email, full_name, role) VALUES 
 ('user', '$2b$12$LQv3c1yqBWVHxkd0LHAkCOYz6TtxMQJqhN8/LewdBPj4J/HS.i8mG', 'user@easysale.com', 'Regular User', 'user');
 
+-- Bảng Categories (Danh mục)
+CREATE TABLE categories (
+  id int NOT NULL AUTO_INCREMENT,
+  user_id int NOT NULL,
+  name varchar(1024) CHARACTER SET utf8mb4 COLLATE utf8mb4_0900_ai_ci NOT NULL,
+  parents int DEFAULT NULL,
+  created_at datetime NOT NULL,
+  updated_at datetime NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY user_id (`user_id`),
+  CONSTRAINT categories_ibfk_1 FOREIGN KEY (`user_id`) REFERENCES users (`id`)
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+
 CREATE TABLE link_crawls (
   id int NOT NULL AUTO_INCREMENT,
   link int NOT NULL,
@@ -43,10 +56,10 @@ CREATE TABLE link_crawls (
   CONSTRAINT link_crawls_ibfk_1 FOREIGN KEY (`user_id`) REFERENCES users (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
 
-
-
 CREATE TABLE documents (
   id int NOT NULL AUTO_INCREMENT,
+  user_id int NOT NULL,
+  category_id int NOT NULL,
   title varchar(255) NOT NULL,
   source_type enum('pdf','docx','web','text') NOT NULL,
   source_path text,
@@ -55,9 +68,12 @@ CREATE TABLE documents (
   updated_at datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
   status enum('active','inactive','pending') DEFAULT 'active',
   description text,
-  PRIMARY KEY (`id`)
+  PRIMARY KEY (`id`),
+  KEY user_id (`user_id`),
+  KEY category_id (`category_id`),
+  CONSTRAINT documents_ibfk_1 FOREIGN KEY (`user_id`) REFERENCES users (`id`),
+  CONSTRAINT documents_ibfk_2 FOREIGN KEY (`category_id`) REFERENCES categories (`id`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
-
 
 CREATE TABLE document_chunks (
   id int NOT NULL AUTO_INCREMENT,
@@ -70,3 +86,4 @@ CREATE TABLE document_chunks (
   KEY document_id (`document_id`),
   CONSTRAINT document_chunks_ibfk_1 FOREIGN KEY (`document_id`) REFERENCES documents (`id`) ON DELETE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+

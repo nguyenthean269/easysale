@@ -2,7 +2,9 @@ from flask import Blueprint, jsonify, request
 from flask_jwt_extended import jwt_required, get_jwt_identity
 from utils.permissions import require_roles, require_permissions, require_ownership
 from utils.rate_limit import apply_rate_limit
-from models import User, LinkCrawl, db
+from utils.groq_service import GroqChat
+from utils.vector_service import get_vector_service
+from models import User, LinkCrawl, Document, DocumentChunk, db
 import requests
 import json
 from datetime import datetime
@@ -82,6 +84,53 @@ def get_own_profile(user_id):
         'user': user.to_dict()
     })
 
+def retry_failed_milvus_inserts(document_id):
+    """Retry insert các chunks bị fail vào Milvus"""
+    try:
+        from models import DocumentChunk
+        from utils.vector_service import get_vector_service
+        
+        # Lấy các chunks không có milvus_id
+        failed_chunks = DocumentChunk.query.filter_by(
+            document_id=document_id,
+            milvus_id=None
+        ).all()
+        
+        if not failed_chunks:
+            print(f"✅ No failed chunks to retry for document {document_id}")
+            return {'successful': 0, 'failed': 0}
+        
+        print(f"🔄 Retrying {len(failed_chunks)} failed chunks for document {document_id}")
+        
+        vector_service = get_vector_service()
+        successful = 0
+        failed = 0
+        
+        for chunk in failed_chunks:
+            try:
+                print(f"🔗 Retrying chunk {chunk.chunk_index}...")
+                milvus_id = vector_service.insert_chunk(
+                    document_id=chunk.document_id,
+                    chunk_index=chunk.chunk_index,
+                    content=chunk.content
+                )
+                
+                chunk.milvus_id = milvus_id
+                db.session.commit()
+                print(f"✅ Chunk {chunk.chunk_index} retry successful: {milvus_id}")
+                successful += 1
+                
+            except Exception as e:
+                print(f"❌ Chunk {chunk.chunk_index} retry failed: {e}")
+                failed += 1
+        
+        print(f"📊 Retry summary: {successful} successful, {failed} failed")
+        return {'successful': successful, 'failed': failed}
+        
+    except Exception as e:
+        print(f"❌ Error in retry_failed_milvus_inserts: {e}")
+        return {'successful': 0, 'failed': len(failed_chunks)}
+
 @user_bp.route('/crawls', methods=['POST'])
 @require_roles('user', 'manager', 'admin')
 @apply_rate_limit("10 per minute")
@@ -124,15 +173,128 @@ def create_crawl():
         
         db.session.add(link_crawl)
         db.session.commit()
+
+        groq_chat = GroqChat(
+            # max_tokens=8192,
+            max_tokens=32768,
+            temperature=0.8,
+            # model="deepseek-r1-distill-llama-70b",
+            model="llama-3.3-70b-versatile",
+            # model="gemma2-9b-it",
+            # model="qwen-qwq-32b",
+            # response_format={
+            #     "type": "json_object"
+            # }
+            stream=False
+        )
+
+        prompt = f'''
+        Hãy chia nội dung trong <content></content> thành các chunk dưới 300 từ và trả về dưới dạng json array có schema như sau:
+
+        {{
+        "$schema": "http://json-schema.org/draft-07/schema#",
+        "type": "array",
+        "title": "Danh sách các chunk",
+        "items": {{
+            "type": "string",
+            "title": "Đoạn văn",
+            "minLength": 1
+        }},
+        "minItems": 1,
+        "uniqueItems": false
+        }}
+
+        <content>
+        {firecrawl_response.get('content', '')}
+        </content>
+
+        Quy tắc bắt buộc:
+        - Chỉ trả về kết quả cuối cùng, không diễn giải cách làm.
+        - Không nói về cặp thẻ <content></content> trong câu trả lời.
+        '''
+        print(prompt)
+        response = groq_chat.chat(prompt, "Hãy chia chunk").clean()
+        print(response)
+        print(json.loads(response))
+
+
+
+        # Thêm dữ liệu crawl vào bảng document
+        document = Document(
+            user_id=user_id,
+            category_id=1,
+            title=f"Crawl {link}",
+            source_type="web",
+            source_path=link,
+        )
+        db.session.add(document)
+        db.session.commit()
+
+        # Thêm dữ liệu chunk vào bảng document_chunks
+        vector_service = get_vector_service()
+        chunk_index = 0
+        successful_milvus_inserts = 0
+        failed_milvus_inserts = 0
         
+        print(f"🔄 Processing {len(json.loads(response))} chunks...")
+        
+        for chunk in json.loads(response):
+            print(f"📝 Processing chunk {chunk_index + 1}/{len(json.loads(response))}")
+            
+            # Tạo document chunk trong database
+            document_chunk = DocumentChunk(
+                document_id=document.id,
+                chunk_index=chunk_index,
+                content=chunk,
+            )
+            db.session.add(document_chunk)
+            db.session.flush()  # Để lấy ID của document_chunk
+            
+            # Tạo embedding và lưu vào Milvus
+            try:
+                print(f"🔗 Inserting chunk {chunk_index} into Milvus...")
+                milvus_id = vector_service.insert_chunk(
+                    document_id=document.id,
+                    chunk_index=chunk_index,
+                    content=chunk
+                )
+                
+                # Cập nhật milvus_id trong database
+                document_chunk.milvus_id = milvus_id
+                print(f"✅ Chunk {chunk_index} inserted into Milvus with ID: {milvus_id}")
+                successful_milvus_inserts += 1
+                
+            except Exception as e:
+                print(f"⚠️ Warning: Failed to insert chunk {chunk_index} into Milvus: {e}")
+                # Chunk vẫn được lưu trong database nhưng không có milvus_id
+                document_chunk.milvus_id = None
+                failed_milvus_inserts += 1
+            
+            # Commit từng chunk để tránh mất dữ liệu
+            db.session.commit()
+            chunk_index += 1
+        
+        print(f"📊 Milvus insertion summary:")
+        print(f"   ✅ Successful: {successful_milvus_inserts}")
+        print(f"   ❌ Failed: {failed_milvus_inserts}")
+        print(f"   📝 Total chunks: {chunk_index}")
+
+            
         return jsonify({
             'message': 'Crawl completed successfully',
             'crawl_id': link_crawl.id,
+            'document_id': document.id,
             'link': link,
             'crawl_tool': crawl_tool,
             'started_at': started_at.isoformat(),
             'done_at': done_at.isoformat(),
-            'content_length': len(firecrawl_response.get('content', ''))
+            'content_length': len(firecrawl_response.get('content', '')),
+            'chunks_processed': chunk_index,
+            'milvus_inserts': {
+                'successful': successful_milvus_inserts,
+                'failed': failed_milvus_inserts,
+                'total': chunk_index
+            }
         })
         
     except Exception as e:
@@ -257,3 +419,85 @@ def get_crawl_detail(crawl_id):
         'message': 'Chi tiết crawl',
         'crawl': crawl.to_dict()
     }) 
+
+@user_bp.route('/documents/<int:document_id>/retry-milvus', methods=['POST'])
+@require_roles('user', 'manager', 'admin')
+@apply_rate_limit("5 per minute")
+def retry_milvus_inserts(document_id):
+    """Retry insert các chunks bị fail vào Milvus cho một document"""
+    try:
+        # Kiểm tra document tồn tại
+        document = Document.query.get(document_id)
+        if not document:
+            return jsonify({'error': 'Document not found'}), 404
+        
+        # Kiểm tra quyền sở hữu
+        current_user_id = int(get_jwt_identity())
+        if document.user_id != current_user_id:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Thực hiện retry
+        result = retry_failed_milvus_inserts(document_id)
+        
+        return jsonify({
+            'message': 'Retry completed',
+            'document_id': document_id,
+            'retry_results': result
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Retry failed: {str(e)}'}), 500
+
+@user_bp.route('/search', methods=['POST'])
+@require_roles('user', 'manager', 'admin')
+@apply_rate_limit("20 per minute")
+def search_documents():
+    """Tìm kiếm documents bằng vector search"""
+    user_id = int(get_jwt_identity())
+    
+    data = request.get_json()
+    
+    # Validate input
+    if not data or 'query' not in data:
+        return jsonify({'error': 'Query is required'}), 400
+    
+    query = data['query']
+    top_k = data.get('top_k', 5)
+    document_ids = data.get('document_ids', None)  # Filter theo document IDs
+    
+    try:
+        vector_service = get_vector_service()
+        
+        # Thực hiện vector search
+        search_results = vector_service.search_similar(
+            query=query,
+            top_k=top_k,
+            document_ids=document_ids
+        )
+        
+        # Lấy thông tin chi tiết của chunks từ database
+        detailed_results = []
+        for result in search_results:
+            chunk = DocumentChunk.query.filter_by(milvus_id=result['id']).first()
+            if chunk:
+                document = Document.query.get(chunk.document_id)
+                if document:
+                    detailed_results.append({
+                        'chunk_id': chunk.id,
+                        'document_id': chunk.document_id,
+                        'document_title': document.title,
+                        'chunk_index': chunk.chunk_index,
+                        'content': chunk.content,
+                        'similarity_score': result['score'],
+                        'source_path': document.source_path
+                    })
+        
+        return jsonify({
+            'message': 'Search completed successfully',
+            'query': query,
+            'total_results': len(detailed_results),
+            'results': detailed_results
+        })
+        
+    except Exception as e:
+        return jsonify({'error': f'Search failed: {str(e)}'}), 500 
