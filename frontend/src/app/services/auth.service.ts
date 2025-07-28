@@ -10,20 +10,28 @@ export interface LoginRequest {
 }
 
 export interface LoginResponse {
+  message: string;
   access_token: string;
-  token_type: string;
+  refresh_token: string;
   user: {
     id: number;
     username: string;
-    name: string;
+    full_name: string;
+    email: string;
     role: string;
   };
+}
+
+export interface RefreshResponse {
+  access_token: string;
+  message: string;
 }
 
 export interface User {
   id: number;
   username: string;
-  name: string;
+  full_name: string;
+  email: string;
   role: string;
 }
 
@@ -50,9 +58,10 @@ export class AuthService {
     }
     
     const token = localStorage.getItem('access_token');
+    const refreshToken = localStorage.getItem('refresh_token');
     const userStr = localStorage.getItem('current_user');
     
-    if (token && userStr) {
+    if (token && refreshToken && userStr) {
       try {
         const user = JSON.parse(userStr);
         this.currentUserSubject.next(user);
@@ -66,23 +75,66 @@ export class AuthService {
     return this.http.post<LoginResponse>(`${environment.apiBaseUrl}/auth/login`, credentials)
       .pipe(
         tap(response => {
+          console.log('🔐 Login response:', response);
+          console.log('Access token:', response.access_token ? 'Present' : 'Missing');
+          console.log('Refresh token:', response.refresh_token ? 'Present' : 'Missing');
+          
           // Lưu token và user info (chỉ trên browser)
           if (isPlatformBrowser(this.platformId)) {
             localStorage.setItem('access_token', response.access_token);
+            localStorage.setItem('refresh_token', response.refresh_token);
             localStorage.setItem('current_user', JSON.stringify(response.user));
+            
+            console.log('✅ Tokens saved to localStorage');
+            console.log('Access token in localStorage:', !!localStorage.getItem('access_token'));
+            console.log('Refresh token in localStorage:', !!localStorage.getItem('refresh_token'));
           }
           this.currentUserSubject.next(response.user);
         })
       );
   }
 
-  logout(): void {
-    this.clearAuth();
+  refreshToken(): Observable<RefreshResponse> {
+    const refreshToken = this.getRefreshToken();
+    console.log('🔄 AuthService.refreshToken() called');
+    console.log('Refresh token available:', !!refreshToken);
+    
+    if (!refreshToken) {
+      throw new Error('No refresh token available');
+    }
+    
+    console.log('🔄 Making refresh API call with refresh token...');
+    return this.http.post<RefreshResponse>(`${environment.apiBaseUrl}/auth/refresh`, {}, {
+      headers: {
+        'Authorization': `Bearer ${refreshToken}`
+      }
+    }).pipe(
+      tap(response => {
+        console.log('✅ Refresh API response received:', response);
+        if (isPlatformBrowser(this.platformId)) {
+          localStorage.setItem('access_token', response.access_token);
+          console.log('✅ New access token saved to localStorage');
+        }
+      })
+    );
   }
 
-  private clearAuth(): void {
+  logout(): Observable<any> {
+    return this.http.post(`${environment.apiBaseUrl}/auth/logout`, {}, {
+      headers: {
+        'Authorization': `Bearer ${this.getToken()}`
+      }
+    }).pipe(
+      tap(() => {
+        this.clearAuth();
+      })
+    );
+  }
+
+  clearAuth(): void {
     if (isPlatformBrowser(this.platformId)) {
       localStorage.removeItem('access_token');
+      localStorage.removeItem('refresh_token');
       localStorage.removeItem('current_user');
     }
     this.currentUserSubject.next(null);
@@ -95,8 +147,15 @@ export class AuthService {
     return localStorage.getItem('access_token');
   }
 
+  getRefreshToken(): string | null {
+    if (!isPlatformBrowser(this.platformId)) {
+      return null;
+    }
+    return localStorage.getItem('refresh_token');
+  }
+
   isAuthenticated(): boolean {
-    return !!this.getToken();
+    return !!(this.getToken() && this.getRefreshToken());
   }
 
   getCurrentUser(): User | null {

@@ -501,3 +501,111 @@ def search_documents():
         
     except Exception as e:
         return jsonify({'error': f'Search failed: {str(e)}'}), 500 
+
+@user_bp.route('/documents', methods=['GET'])
+@require_roles('user', 'manager', 'admin')
+@apply_rate_limit("30 per minute")
+def get_documents():
+    """Lấy danh sách documents của user"""
+    user_id = int(get_jwt_identity())
+    # Lấy user để biết role
+    current_user = User.query.get(user_id)
+    if not current_user:
+        return jsonify({'error': 'User not found'}), 404
+    user_role = current_user.role
+    
+    # Admin có thể xem tất cả documents
+    if user_role == 'admin':
+        documents = Document.query.all()
+    else:
+        # User thường chỉ xem documents của chính mình
+        documents = Document.query.filter_by(user_id=user_id).all()
+    
+    return jsonify({
+        'message': 'Danh sách documents',
+        'documents': [doc.to_dict() for doc in documents]
+    })
+
+@user_bp.route('/documents/<int:document_id>', methods=['GET'])
+@require_roles('user', 'manager', 'admin')
+@apply_rate_limit("30 per minute")
+def get_document_detail(document_id):
+    """Lấy chi tiết một document cụ thể"""
+    user_id = int(get_jwt_identity())
+    # Lấy user để biết role
+    current_user = User.query.get(user_id)
+    if not current_user:
+        return jsonify({'error': 'User not found'}), 404
+    user_role = current_user.role
+    
+    document = Document.query.get(document_id)
+    if not document:
+        return jsonify({'error': 'Document not found'}), 404
+    
+    # Kiểm tra quyền truy cập
+    if user_role != 'admin' and document.user_id != user_id:
+        return jsonify({'error': 'Access denied'}), 403
+    
+    # Lấy thông tin chunks
+    chunks = DocumentChunk.query.filter_by(document_id=document_id).all()
+    
+    return jsonify({
+        'message': 'Chi tiết document',
+        'document': document.to_dict(),
+        'chunks_count': len(chunks),
+        'chunks': [chunk.to_dict() for chunk in chunks]
+    })
+
+@user_bp.route('/documents/<int:document_id>', methods=['DELETE'])
+@require_roles('user', 'manager', 'admin')
+@apply_rate_limit("10 per minute")
+def delete_document(document_id):
+    """Xóa document và tất cả chunks liên quan từ database và Milvus"""
+    try:
+        # Kiểm tra document tồn tại
+        document = Document.query.get(document_id)
+        if not document:
+            return jsonify({'error': 'Document not found'}), 404
+        
+        # Kiểm tra quyền sở hữu
+        current_user_id = int(get_jwt_identity())
+        if document.user_id != current_user_id:
+            return jsonify({'error': 'Access denied'}), 403
+        
+        # Lấy tất cả chunks của document
+        chunks = DocumentChunk.query.filter_by(document_id=document_id).all()
+        
+        # Xóa từ Milvus trước
+        vector_service = get_vector_service()
+        milvus_deleted = 0
+        milvus_failed = 0
+        
+        try:
+            vector_service.delete_document_chunks(document_id)
+            milvus_deleted = len(chunks)
+            print(f"✅ Deleted all {len(chunks)} chunks from Milvus for document {document_id}")
+        except Exception as e:
+            milvus_failed = len(chunks)
+            print(f"⚠️ Warning: Failed to delete chunks from Milvus: {e}")
+        
+        # Xóa chunks từ database
+        DocumentChunk.query.filter_by(document_id=document_id).delete()
+        
+        # Xóa document từ database
+        db.session.delete(document)
+        db.session.commit()
+        
+        return jsonify({
+            'message': 'Document deleted successfully',
+            'document_id': document_id,
+            'chunks_deleted': len(chunks),
+            'milvus_deletion': {
+                'successful': milvus_deleted,
+                'failed': milvus_failed,
+                'total': len(chunks)
+            }
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({'error': f'Delete failed: {str(e)}'}), 500 

@@ -62,8 +62,14 @@ import { AuthService } from '../../services/auth.service';
           </ng-container>
           
           <ng-template #userMenu>
+            <a 
+              routerLink="/dashboard/documents" 
+              routerLinkActive="text-blue-600 font-medium"
+              class="text-gray-600 hover:text-blue-600 transition-colors">
+              Dashboard
+            </a>
             <div class="flex items-center space-x-2">
-              <span class="text-gray-600">{{ authService.getCurrentUser()?.name }}</span>
+              <span class="text-gray-600">{{ authService.getCurrentUser()?.username }}</span>
               <button nz-button nzType="default" (click)="logout()">
                 Logout
               </button>

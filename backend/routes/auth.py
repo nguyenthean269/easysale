@@ -1,5 +1,5 @@
 from flask import Blueprint, request, jsonify
-from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity
+from flask_jwt_extended import create_access_token, create_refresh_token, jwt_required, get_jwt_identity, get_jwt
 from werkzeug.security import generate_password_hash, check_password_hash
 from models import User, db
 from utils.permissions import require_roles, require_permissions, get_permissions_by_role
@@ -77,10 +77,12 @@ def register():
         
         # Tạo token cho user mới
         access_token = create_access_token(identity=str(new_user.id))
+        refresh_token = create_refresh_token(identity=str(new_user.id))
         
         return jsonify({
             'message': 'Đăng ký thành công',
             'access_token': access_token,
+            'refresh_token': refresh_token,
             'user': new_user.to_dict()
         }), 201
         
@@ -115,10 +117,12 @@ def login():
         
         # Tạo token với user_id làm identity (chuyển thành string)
         access_token = create_access_token(identity=str(user.id))
+        refresh_token = create_refresh_token(identity=str(user.id))
         
         return jsonify({
             'message': 'Đăng nhập thành công',
             'access_token': access_token,
+            'refresh_token': refresh_token,
             'user': user.to_dict()
         }), 200
         
@@ -177,6 +181,61 @@ def get_profile():
             return jsonify({'error': 'Không tìm thấy user'}), 404
         
         return jsonify({'user': user.to_dict()}), 200
+        
+    except Exception as e:
+        return jsonify({'error': 'Lỗi server, vui lòng thử lại sau'}), 500
+
+@auth_bp.route('/refresh', methods=['POST'])
+@jwt_required(refresh=True)
+@apply_rate_limit("30 per minute")
+def refresh():
+    """Refresh access token bằng refresh token"""
+    try:
+        # Lấy thông tin token hiện tại
+        jwt_data = get_jwt()
+        
+        # Kiểm tra xem có phải refresh token không
+        if jwt_data.get('type') != 'refresh':
+            return jsonify({
+                'error': 'Invalid token type',
+                'message': 'Chỉ chấp nhận refresh token'
+            }), 401
+        
+        current_user_id = int(get_jwt_identity())
+        user = User.query.get(current_user_id)
+        
+        if not user:
+            return jsonify({'error': 'User không tồn tại'}), 404
+        
+        if not user.is_active:
+            return jsonify({'error': 'Tài khoản đã bị khóa'}), 401
+        
+        # Tạo access token mới
+        new_access_token = create_access_token(identity=str(user.id))
+        
+        return jsonify({
+            'message': 'Token đã được refresh thành công',
+            'access_token': new_access_token
+        }), 200
+        
+    except Exception as e:
+        return jsonify({'error': 'Lỗi server, vui lòng thử lại sau'}), 500
+
+@auth_bp.route('/logout', methods=['POST'])
+@jwt_required()
+@apply_rate_limit("30 per minute")
+def logout():
+    """Đăng xuất và vô hiệu hóa token"""
+    try:
+        # Lấy thông tin token hiện tại
+        jti = get_jwt()["jti"]
+        
+        # Trong thực tế, bạn có thể lưu jti vào blacklist để vô hiệu hóa token
+        # Ở đây chúng ta chỉ trả về thông báo thành công
+        
+        return jsonify({
+            'message': 'Đăng xuất thành công'
+        }), 200
         
     except Exception as e:
         return jsonify({'error': 'Lỗi server, vui lòng thử lại sau'}), 500 

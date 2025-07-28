@@ -14,7 +14,7 @@ export const routes: Routes = [
     component: AdminLayoutComponent,
     children: [
       { path: '', component: DashboardComponent },
-      { path: 'users', component: UsersComponent },
+      { path: 'documents', component: UsersComponent },
       { path: 'products', component: DashboardComponent }, // Placeholder
       { path: 'orders', component: DashboardComponent }, // Placeholder
       { path: 'settings', component: DashboardComponent }, // Placeholder

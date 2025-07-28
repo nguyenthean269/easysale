@@ -22,6 +22,11 @@ CORS(app)
 
 # Khởi tạo các extension
 jwt = JWTManager(app)
+
+# Cấu hình JWT
+app.config['JWT_ACCESS_TOKEN_EXPIRES'] = app.config.get('JWT_ACCESS_TOKEN_EXPIRES', 3600)  # 1 hour
+app.config['JWT_REFRESH_TOKEN_EXPIRES'] = app.config.get('JWT_REFRESH_TOKEN_EXPIRES', 604800)  # 7 days
+
 db.init_app(app)
 migrate = Migrate(app, db)
 

@@ -30,7 +30,7 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
           <h1 class="text-xl font-semibold text-gray-800 m-0">EasySale Admin</h1>
         </div>
         <div class="flex items-center space-x-4">
-          <span class="text-gray-600">Welcome, {{ authService.getCurrentUser()?.name }}</span>
+          <span class="text-gray-600">Welcome, {{ authService.getCurrentUser()?.username }}</span>
           <button nz-button nzType="default" (click)="logout()">
             Logout
           </button>
