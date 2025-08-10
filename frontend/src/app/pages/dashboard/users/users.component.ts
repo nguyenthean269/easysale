@@ -40,10 +40,12 @@ import { DocumentService, Document, CrawlRequest, SearchRequest, SearchResult } 
     FormsModule
   ],
   template: `
-    <div class="space-y-6">
-      <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-semibold text-gray-800">Document & Crawl Management</h1>
-      </div>
+    <div class="p-6">
+      <div class="bg-white p-6 rounded-lg shadow-sm">
+        <div class="space-y-6">
+          <div class="flex items-center justify-between">
+            <h1 class="text-2xl font-semibold text-gray-800">Document & Crawl Management</h1>
+          </div>
       
       <nz-tabset>
         <!-- Documents Tab -->
@@ -196,9 +198,17 @@ import { DocumentService, Document, CrawlRequest, SearchRequest, SearchResult } 
                     <td>{{ crawl.started_at | date:'short' }}</td>
                     <td>{{ crawl.done_at | date:'short' }}</td>
                     <td>
-                      <button nz-button nzType="link" nzSize="small" (click)="viewCrawlDetail(crawl)">
-                        View
-                      </button>
+                      <nz-space>
+                        <button nz-button nzType="link" nzSize="small" (click)="viewCrawlDetail(crawl)">
+                          View
+                        </button>
+                        <button nz-button nzType="link" nzSize="small" (click)="editCrawlContent(crawl)">
+                          Edit
+                        </button>
+                        <button nz-button nzType="link" nzSize="small" (click)="recrawlContent(crawl.id)">
+                          Recrawl
+                        </button>
+                      </nz-space>
                     </td>
                   </tr>
                 </tbody>
@@ -359,6 +369,56 @@ import { DocumentService, Document, CrawlRequest, SearchRequest, SearchResult } 
         </div>
       </div>
     </nz-modal>
+
+    <!-- Edit Crawl Content Modal -->
+    <nz-modal 
+      [(nzVisible)]="editCrawlVisible" 
+      nzTitle="Edit Crawl Content"
+      [nzWidth]="1000"
+      (nzOnCancel)="editCrawlVisible = false">
+      <div *nzModalContent>
+        <div *ngIf="selectedCrawl" class="space-y-4">
+          <div class="grid grid-cols-2 gap-4">
+            <div>
+              <label class="font-medium">Link:</label>
+              <a [href]="selectedCrawl.link" target="_blank" class="text-blue-600">
+                {{ selectedCrawl.link }}
+              </a>
+            </div>
+            <div>
+              <label class="font-medium">Tool:</label>
+              <p>{{ selectedCrawl.crawl_tool }}</p>
+            </div>
+          </div>
+          
+          <div>
+            <label class="font-medium">Content:</label>
+            <textarea 
+              nz-input 
+              [(ngModel)]="editingContent"
+              [nzAutosize]="{ minRows: 10, maxRows: 20 }"
+              class="w-full"
+              placeholder="Enter new content...">
+            </textarea>
+          </div>
+          
+          <div class="flex justify-end space-x-2">
+            <button nz-button (click)="editCrawlVisible = false">
+              Cancel
+            </button>
+            <button 
+              nz-button 
+              nzType="primary" 
+              [nzLoading]="editCrawlLoading"
+              (click)="saveCrawlContent()">
+              Save Changes
+            </button>
+          </div>
+        </div>
+      </div>
+    </nz-modal>
+        </div>
+      </div>
   `,
   styles: [`
     /* Custom styles */
@@ -403,9 +463,12 @@ export class UsersComponent implements OnInit {
   // Modals
   documentDetailVisible = false;
   crawlDetailVisible = false;
+  editCrawlVisible = false;
   selectedDocument: Document | null = null;
   selectedCrawl: any = null;
   documentChunks: any[] = [];
+  editingContent = '';
+  editCrawlLoading = false;
 
   constructor(
     private documentService: DocumentService,
@@ -564,6 +627,51 @@ export class UsersComponent implements OnInit {
         this.message.error('Search failed');
         this.searchLoading = false;
         console.error('Error performing search:', error);
+      }
+    });
+  }
+
+  // New methods for crawl management
+  editCrawlContent(crawl: any) {
+    this.selectedCrawl = crawl;
+    this.editingContent = crawl.content;
+    this.editCrawlVisible = true;
+  }
+
+  saveCrawlContent() {
+    if (!this.selectedCrawl || !this.editingContent.trim()) {
+      this.message.error('Please enter content');
+      return;
+    }
+
+    this.editCrawlLoading = true;
+    this.documentService.updateCrawlContent(this.selectedCrawl.id, this.editingContent).subscribe({
+      next: (response) => {
+        this.message.success('Crawl content updated successfully');
+        this.editCrawlVisible = false;
+        this.editCrawlLoading = false;
+        this.loadCrawls();
+        this.loadDocuments(); // Refresh documents as chunks were updated
+      },
+      error: (error) => {
+        this.message.error('Failed to update crawl content');
+        this.editCrawlLoading = false;
+        console.error('Error updating crawl content:', error);
+      }
+    });
+  }
+
+  recrawlContent(crawlId: number) {
+    this.message.info('Starting recrawl...');
+    this.documentService.recrawlContent(crawlId).subscribe({
+      next: (response) => {
+        this.message.success('Recrawl completed successfully');
+        this.loadCrawls();
+        this.loadDocuments(); // Refresh documents as chunks were updated
+      },
+      error: (error) => {
+        this.message.error('Recrawl failed');
+        console.error('Error recrawling:', error);
       }
     });
   }

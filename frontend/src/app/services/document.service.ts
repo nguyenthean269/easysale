@@ -61,6 +61,29 @@ export interface SearchResult {
   source_path: string;
 }
 
+export interface ContentGenerateRequest {
+  topic: string;
+  loai_bai_viet?: string;
+  khach_hang_so_thich?: string;
+  khach_hang_noi_so?: string;
+  khach_hang_noi_dau?: string;
+  giong_dieu?: string;
+  muc_tieu?: string;
+}
+
+export interface ContentGenerateResponse {
+  success: boolean;
+  content: string;
+  topic: string;
+  loai_bai_viet: string;
+  khach_hang_so_thich: string;
+  khach_hang_noi_so: string;
+  khach_hang_noi_dau: string;
+  giong_dieu: string;
+  muc_tieu: string;
+  knowledge_sources: Array<{source: string, score: number}>;
+}
+
 @Injectable({
   providedIn: 'root'
 })
@@ -154,5 +177,19 @@ export class DocumentService {
       total_results: number;
       results: SearchResult[];
     }>(`${this.apiUrl}/user/search`, searchRequest);
+  }
+
+  // New methods for crawl management
+  updateCrawlContent(crawlId: number, content: string): Observable<CrawlResponse> {
+    return this.http.put<CrawlResponse>(`${this.apiUrl}/user/crawls/${crawlId}`, { content });
+  }
+
+  recrawlContent(crawlId: number): Observable<CrawlResponse> {
+    return this.http.post<CrawlResponse>(`${this.apiUrl}/user/crawls/${crawlId}/recrawl`, {});
+  }
+
+  // Content Generation API
+  generateContent(request: ContentGenerateRequest): Observable<ContentGenerateResponse> {
+    return this.http.post<ContentGenerateResponse>(`${this.apiUrl}/content/generate`, request);
   }
 } 

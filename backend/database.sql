@@ -41,7 +41,36 @@ CREATE TABLE categories (
   PRIMARY KEY (`id`),
   KEY user_id (`user_id`),
   CONSTRAINT categories_ibfk_1 FOREIGN KEY (`user_id`) REFERENCES users (`id`)
-) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci
+) ENGINE=InnoDB AUTO_INCREMENT=2 DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_0900_ai_ci;
+
+-- Bảng Conversations (Cuộc hội thoại Zalo)
+CREATE TABLE conversations (
+  id bigint unsigned NOT NULL AUTO_INCREMENT,
+  thread_id varchar(255) NOT NULL,
+  thread_type varchar(50) NOT NULL,
+  title varchar(255) DEFAULT NULL,
+  created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  updated_at timestamp NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY thread_id (thread_id),
+  KEY thread_type (thread_type)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb3;
+
+-- Bảng Messages (Tin nhắn)
+CREATE TABLE messages (
+  id bigint unsigned NOT NULL AUTO_INCREMENT,
+  conversation_id bigint unsigned NOT NULL,
+  sender_id varchar(128) CHARACTER SET utf8 COLLATE utf8_general_ci NOT NULL DEFAULT 'user',
+  content text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL,
+  message_type varchar(50) DEFAULT 'text',
+  zalo_message_id varchar(255) DEFAULT NULL,
+  created_at timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+  PRIMARY KEY (id),
+  KEY conversation_id (conversation_id),
+  KEY sender_id (sender_id),
+  KEY zalo_message_id (zalo_message_id),
+  CONSTRAINT messages_ibfk_1 FOREIGN KEY (conversation_id) REFERENCES conversations (id)
+) ENGINE=InnoDB AUTO_INCREMENT=1223 DEFAULT CHARSET=utf8mb3;
 
 CREATE TABLE link_crawls (
   id int NOT NULL AUTO_INCREMENT,

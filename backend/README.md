@@ -22,6 +22,7 @@ easysale/
 ├── test_permissions.py   # Permission system tests
 ├── test_config.py        # Configuration tests
 ├── test_retry_after.py   # Rate limit retry after tests
+├── test_crawl_update.py  # Crawl update & recrawl tests
 ├── routes/               # API routes
 │   ├── __init__.py
 │   ├── auth.py           # Authentication routes
@@ -30,7 +31,9 @@ easysale/
 └── utils/                # Utility functions
     ├── __init__.py
     ├── rate_limit.py     # Rate limiting utilities
-    └── permissions.py    # Permission management utilities
+    ├── permissions.py    # Permission management utilities
+    ├── groq_service.py   # Groq LLM integration
+    └── vector_service.py # Milvus vector operations
 ```
 
 ## Cài đặt
@@ -525,6 +528,53 @@ EXPOSE 5000
 
 CMD ["gunicorn", "-w", "4", "-b", "0.0.0.0:5000", "app:app"]
 ```
+
+## Tính năng Crawl & Vector Search
+
+### Crawl Management
+Hệ thống hỗ trợ crawl nội dung từ website và tự động xử lý vector search:
+
+#### API Endpoints
+- **POST** `/user/crawls` - Tạo crawl mới
+- **GET** `/user/crawls` - Lấy danh sách crawls
+- **GET** `/user/crawls/<id>` - Lấy chi tiết crawl
+- **PUT** `/user/crawls/<id>` - Cập nhật content crawl
+- **POST** `/user/crawls/<id>/recrawl` - Crawl lại từ URL
+
+#### Vector Processing
+- Tự động chia content thành chunks (~300 từ)
+- Tạo embeddings sử dụng sentence-transformers
+- Lưu vectors trong Milvus cho semantic search
+- Hỗ trợ search tương tự với **POST** `/user/search`
+
+### Document Management
+- **GET** `/user/documents` - Lấy danh sách documents
+- **GET** `/user/documents/<id>` - Lấy chi tiết document
+- **DELETE** `/user/documents/<id>` - Xóa document
+- **POST** `/user/documents/<id>/retry-milvus` - Retry Milvus inserts
+
+### Cấu hình Milvus
+```env
+MILVUS_HOST=localhost
+MILVUS_PORT=19530
+MILVUS_COLLECTION_NAME=document_chunks
+MILVUS_DIMENSION=768
+EMBEDDING_MODEL=sentence-transformers/paraphrase-multilingual-MiniLM-L12-v2
+```
+
+### Testing Crawl Features
+```bash
+# Test crawl update và recrawl
+python test_crawl_update.py
+
+# Test vector search
+python test_vector_search.py
+```
+
+Xem thêm chi tiết trong:
+- [CRAWL_API.md](CRAWL_API.md) - API documentation
+- [VECTOR_SEARCH_GUIDE.md](VECTOR_SEARCH_GUIDE.md) - Vector search guide
+- [CRAWL_UPDATE_GUIDE.md](CRAWL_UPDATE_GUIDE.md) - Crawl update features
 
 ## Contributing
 1. Fork repository

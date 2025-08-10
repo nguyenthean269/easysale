@@ -53,6 +53,17 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
                 <span class="mr-3">👥</span>
                 <span>Users</span>
               </a>
+              <a routerLink="/dashboard/documents" routerLinkActive="bg-blue-100 text-blue-600"
+                 class="flex items-center px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
+                <span class="mr-3">👥</span>
+                <span>Documents</span>
+              </a>
+              
+              <a routerLink="/dashboard/content-generate" routerLinkActive="bg-blue-100 text-blue-600"
+                 class="flex items-center px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
+                <span class="mr-3">🤖</span>
+                <span>Tạo Nội Dung AI</span>
+              </a>
               
               <a routerLink="/dashboard/products" routerLinkActive="bg-blue-100 text-blue-600"
                  class="flex items-center px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
@@ -77,10 +88,8 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
 
         <!-- Content -->
         <nz-layout>
-          <nz-content class="p-6 bg-gray-50">
-            <div class="bg-white p-6 rounded-lg shadow-sm">
-              <router-outlet></router-outlet>
-            </div>
+          <nz-content class="bg-gray-50">
+            <router-outlet></router-outlet>
           </nz-content>
         </nz-layout>
       </nz-layout>

@@ -56,6 +56,10 @@ class Config:
     
     # Embedding Model Configuration
     EMBEDDING_MODEL = os.getenv('EMBEDDING_MODEL', 'sentence-transformers/all-MiniLM-L6-v2')
+    
+    # Facebook Configuration
+    FACEBOOK_VERIFY_TOKEN = os.getenv('FACEBOOK_VERIFY_TOKEN', 'your-facebook-verify-token')
+    FACEBOOK_APP_SECRET = os.getenv('FACEBOOK_APP_SECRET', '')
 
 class DevelopmentConfig(Config):
     """Development configuration"""

@@ -8,11 +8,13 @@ import { NzGridModule } from 'ng-zorro-antd/grid';
   standalone: true,
   imports: [NzCardModule, NzStatisticModule, NzGridModule],
   template: `
-    <div class="space-y-6">
-      <div class="flex items-center justify-between">
-        <h1 class="text-2xl font-semibold text-gray-800">Dashboard</h1>
-        <span class="text-gray-500">Welcome back, Admin!</span>
-      </div>
+    <div class="p-6">
+      <div class="bg-white p-6 rounded-lg shadow-sm">
+        <div class="space-y-6">
+          <div class="flex items-center justify-between">
+            <h1 class="text-2xl font-semibold text-gray-800">Dashboard</h1>
+            <span class="text-gray-500">Welcome back, Admin!</span>
+          </div>
       
       <nz-row [nzGutter]="[16, 16]">
         <nz-col [nzSpan]="6">
@@ -80,6 +82,8 @@ import { NzGridModule } from 'ng-zorro-antd/grid';
           </nz-card>
         </nz-col>
       </nz-row>
+        </div>
+      </div>
     </div>
   `,
   styles: [`

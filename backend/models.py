@@ -124,3 +124,74 @@ class DocumentChunk(db.Model):
             'milvus_id': self.milvus_id,
             'created_at': self.created_at.isoformat() if self.created_at else None
         }
+
+class Conversation(db.Model):
+    __tablename__ = 'conversations'
+    
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    thread_id = db.Column(db.String(255), nullable=False)  # Zalo thread ID
+    thread_type = db.Column(db.String(50), nullable=False)  # 'user', 'group', etc.
+    title = db.Column(db.String(255))  # Optional conversation title
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    # Relationship
+    messages = db.relationship('Message', backref='conversation', cascade='all, delete-orphan')
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'thread_id': self.thread_id,
+            'thread_type': self.thread_type,
+            'title': self.title,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class Message(db.Model):
+    __tablename__ = 'messages'
+    
+    id = db.Column(db.BigInteger, primary_key=True, autoincrement=True)
+    conversation_id = db.Column(db.BigInteger, db.ForeignKey('conversations.id'), nullable=False)
+    sender_id = db.Column(db.String(128), nullable=False, default='user')
+    content = db.Column(db.Text, nullable=False)
+    message_type = db.Column(db.String(50), default='text')  # 'text', 'image', 'file', etc.
+    zalo_message_id = db.Column(db.String(255))  # Original Zalo message ID
+    facebook_message_id = db.Column(db.String(255))  # Original Facebook message ID
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'conversation_id': self.conversation_id,
+            'sender_id': self.sender_id,
+            'content': self.content,
+            'message_type': self.message_type,
+            'zalo_message_id': self.zalo_message_id,
+            'facebook_message_id': self.facebook_message_id,
+            'created_at': self.created_at.isoformat() if self.created_at else None
+        }
+
+class FacebookPage(db.Model):
+    __tablename__ = 'agent_facebook_pages'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    chatbot_id = db.Column(db.Integer, nullable=True)
+    page_id = db.Column(db.String(255), nullable=True)
+    page_name = db.Column(db.Text, nullable=True)
+    page_access_token = db.Column(db.Text, nullable=True)
+    status = db.Column(db.Boolean, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'chatbot_id': self.chatbot_id,
+            'page_id': self.page_id,
+            'page_name': self.page_name,
+            'page_access_token': self.page_access_token,
+            'status': self.status,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }

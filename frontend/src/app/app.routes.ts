@@ -6,6 +6,7 @@ import { UsersComponent } from './pages/dashboard/users/users.component';
 import { HomeComponent } from './pages/home/home.component';
 import { ProductsComponent } from './pages/products/products.component';
 import { LoginComponent } from './pages/login/login.component';
+import { ContentGenerateComponent } from './pages/content-generate/content-generate.component';
 
 export const routes: Routes = [
   // Dashboard routes with admin layout (no SSR)
@@ -15,6 +16,7 @@ export const routes: Routes = [
     children: [
       { path: '', component: DashboardComponent },
       { path: 'documents', component: UsersComponent },
+      { path: 'content-generate', component: ContentGenerateComponent },
       { path: 'products', component: DashboardComponent }, // Placeholder
       { path: 'orders', component: DashboardComponent }, // Placeholder
       { path: 'settings', component: DashboardComponent }, // Placeholder
