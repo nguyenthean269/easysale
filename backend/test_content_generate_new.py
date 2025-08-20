@@ -52,7 +52,7 @@ def test_content_generate(access_token):
         "khach_hang_noi_so": "Da bị lão hóa, nếp nhăn",
         "khach_hang_noi_dau": "Da khô, thiếu độ ẩm, mất đàn hồi",
         "giong_dieu": "Thân thiện, tự tin, chuyên nghiệp",
-        "muc_tieu": "Thuyết phục khách hàng mua sản phẩm"
+        "muc_tieu": "Bán sản phẩm"
     }
     
     print(f"\n🔄 Testing content generation với tham số mới...")
@@ -115,7 +115,7 @@ def test_different_scenarios(access_token):
                 "khach_hang_noi_so": "Không có kinh nghiệm lập trình, khó học",
                 "khach_hang_noi_dau": "Thiếu kỹ năng IT, khó tìm việc",
                 "giong_dieu": "Động viên, tích cực, dễ hiểu",
-                "muc_tieu": "Khuyến khích đăng ký khóa học"
+                "muc_tieu": "Bán sản phẩm"
             }
         },
         {
@@ -127,7 +127,7 @@ def test_different_scenarios(access_token):
                 "khach_hang_noi_so": "Giá cả cao, chất lượng không đảm bảo",
                 "khach_hang_noi_dau": "Khó tìm nhà hàng chất lượng, phù hợp gia đình",
                 "giong_dieu": "Sang trọng, hấp dẫn, tin cậy",
-                "muc_tieu": "Tạo cảm giác thèm ăn và muốn đặt bàn"
+                "muc_tieu": "Bán sản phẩm"
             }
         },
         {
@@ -139,7 +139,7 @@ def test_different_scenarios(access_token):
                 "khach_hang_noi_so": "Tour kém chất lượng, lừa đảo, không an toàn",
                 "khach_hang_noi_dau": "Stress công việc, cần thư giãn nhưng không biết đi đâu",
                 "giong_dieu": "Vui vẻ, phấn khích, tin cậy",
-                "muc_tieu": "Tạo cảm hứng du lịch và đặt tour"
+                "muc_tieu": "Bán sản phẩm"
             }
         }
     ]

@@ -132,7 +132,7 @@ Sở thích KH: "Làm đẹp tự nhiên, chăm sóc da"
 Nỗi sợ KH: "Da bị lão hóa, nếp nhăn"
 Điểm đau KH: "Da khô, thiếu độ ẩm"
 Giọng điệu: "Thân thiện, tự tin, chuyên nghiệp"
-Mục tiêu: "Thuyết phục khách hàng mua sản phẩm"
+Mục tiêu: "Bán sản phẩm"
 ```
 
 ### 2. Tạo email marketing
@@ -143,7 +143,7 @@ Sở thích KH: "Ẩm thực, hải sản, không gian sang trọng"
 Nỗi sợ KH: "Giá cả cao, chất lượng không đảm bảo"
 Điểm đau KH: "Khó tìm nhà hàng chất lượng"
 Giọng điệu: "Sang trọng, hấp dẫn, tin cậy"
-Mục tiêu: "Tạo cảm giác thèm ăn và muốn đặt bàn"
+Mục tiêu: "Bán sản phẩm"
 ```
 
 ## Development

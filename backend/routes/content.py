@@ -123,8 +123,8 @@ def create_system_prompt(loai_bai_viet, khach_hang_so_thich, khach_hang_noi_so, 
         knowledge_section += "Hãy sử dụng tri thức tham khảo trên để làm phong phú nội dung, nhưng đừng copy nguyên văn. Hãy diễn giải và kết hợp một cách tự nhiên.\n"
     
     prompt = f"""
-    Bạn là một chuyên gia tạo nội dung marketing chuyên nghiệp. Hãy tạo nội dung dựa trên thông tin sau:
-    
+    Có rất nhiều bài đăng bán nhà trên facebook nhưng nội dung bán hàng khiến khách hàng không có hứng thú đọc và sẽ lướt qua bài viết. Tôi muốn một bài viết khắc phục điều đó.
+
     THÔNG TIN KHÁCH HÀNG:
     - Sở thích: {khach_hang_so_thich if khach_hang_so_thich else 'Chưa xác định'}
     - Nỗi sợ/Lo lắng: {khach_hang_noi_so if khach_hang_noi_so else 'Chưa xác định'}
@@ -133,7 +133,7 @@ def create_system_prompt(loai_bai_viet, khach_hang_so_thich, khach_hang_noi_so, 
     YÊU CẦU NỘI DUNG:
     - Loại bài viết: {loai_bai_viet if loai_bai_viet else 'Bài viết thông tin'}
     - Giọng điệu: {giong_dieu if giong_dieu else 'Chuyên nghiệp và thân thiện'}
-    - Mục tiêu: {muc_tieu if muc_tieu else 'Cung cấp giá trị và thu hút khách hàng'}
+    - Mục tiêu: {muc_tieu if muc_tieu else 'Chia sẻ thông tin'}
     {knowledge_section}
     HƯỚNG DẪN TẠO NỘI DUNG:
     1. Hiểu rõ đối tượng khách hàng dựa trên sở thích, nỗi sợ và điểm đau
