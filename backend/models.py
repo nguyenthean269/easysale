@@ -176,7 +176,6 @@ class FacebookPage(db.Model):
     __tablename__ = 'agent_facebook_pages'
     
     id = db.Column(db.Integer, primary_key=True, autoincrement=True)
-    chatbot_id = db.Column(db.Integer, nullable=True)
     page_id = db.Column(db.String(255), nullable=True)
     page_name = db.Column(db.Text, nullable=True)
     page_access_token = db.Column(db.Text, nullable=True)
@@ -187,11 +186,26 @@ class FacebookPage(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
-            'chatbot_id': self.chatbot_id,
             'page_id': self.page_id,
             'page_name': self.page_name,
             'page_access_token': self.page_access_token,
             'status': self.status,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'updated_at': self.updated_at.isoformat() if self.updated_at else None
+        }
+
+class Post(db.Model):
+    __tablename__ = 'posts'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    content = db.Column(db.Text, nullable=False)
+    staus = db.Column(db.Enum('draft', 'posted', name='post_status'), nullable=False)
+    created_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow)
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'content': self.content,
+            'staus': self.staus,
+            'created_at': self.created_at.isoformat() if self.created_at else None
         }

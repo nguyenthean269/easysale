@@ -48,12 +48,14 @@ from routes.admin import admin_bp
 from routes.user import user_bp
 from routes.facebook import facebook_bp
 from routes.content import content_bp
+from routes.posts import posts_bp
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(admin_bp, url_prefix='/admin')
 app.register_blueprint(user_bp, url_prefix='/user')
 app.register_blueprint(facebook_bp, url_prefix='/facebook')
 app.register_blueprint(content_bp, url_prefix='/content')
+app.register_blueprint(posts_bp, url_prefix='/posts')
 
 # Error handler cho JWT
 @jwt.invalid_token_loader

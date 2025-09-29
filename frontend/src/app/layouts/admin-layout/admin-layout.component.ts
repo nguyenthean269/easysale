@@ -65,6 +65,12 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
                 <span>Tạo Nội Dung AI</span>
               </a>
               
+              <a routerLink="/dashboard/post" routerLinkActive="bg-blue-100 text-blue-600"
+                 class="flex items-center px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
+                <span class="mr-3">📝</span>
+                <span>Đăng Bài Facebook</span>
+              </a>
+              
               <a routerLink="/dashboard/products" routerLinkActive="bg-blue-100 text-blue-600"
                  class="flex items-center px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
                 <span class="mr-3">🛍️</span>

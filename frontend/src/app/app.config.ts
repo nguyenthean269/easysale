@@ -6,6 +6,8 @@ import { provideHttpClient, withInterceptors, withFetch } from '@angular/common/
 import { routes } from './app.routes';
 import { provideClientHydration, withEventReplay } from '@angular/platform-browser';
 import { AuthInterceptor } from './interceptors/auth.interceptor';
+import { provideNzI18n, vi_VN } from 'ng-zorro-antd/i18n';
+import { NzMessageService } from 'ng-zorro-antd/message';
 
 
 export const appConfig: ApplicationConfig = {
@@ -14,6 +16,11 @@ export const appConfig: ApplicationConfig = {
     provideRouter(routes),
     provideClientHydration(withEventReplay()),
     provideAnimations(),
-    provideHttpClient(withInterceptors([AuthInterceptor]), withFetch())
+    provideHttpClient(withInterceptors([AuthInterceptor]), withFetch()),
+    provideNzI18n(vi_VN),
+    {
+      provide: 'NzMessageService',
+      useClass: NzMessageService
+    }
   ]
 };

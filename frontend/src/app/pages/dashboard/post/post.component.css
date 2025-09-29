@@ -1,0 +1,156 @@
+.post-dashboard {
+  padding: 24px;
+  background-color: #f5f5f5;
+  min-height: 100vh;
+}
+
+.dashboard-content {
+  max-width: 1400px;
+  margin: 0 auto;
+}
+
+.columns-container {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 24px;
+  margin-bottom: 24px;
+}
+
+.column {
+  min-width: 0;
+}
+
+.pagination-container {
+  margin-top: 16px;
+  text-align: center;
+}
+
+.post-content {
+  max-width: 100%;
+}
+
+.post-text {
+  word-wrap: break-word;
+  line-height: 1.5;
+  color: #333;
+}
+
+.page-info {
+  max-width: 100%;
+}
+
+.page-name {
+  font-weight: 500;
+  color: #333;
+  margin-bottom: 4px;
+}
+
+.page-id {
+  font-size: 12px;
+  color: #666;
+}
+
+/* Responsive design */
+@media (max-width: 1200px) {
+  .columns-container {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+}
+
+@media (max-width: 768px) {
+  .post-dashboard {
+    padding: 16px;
+  }
+  
+  .columns-container {
+    gap: 12px;
+  }
+}
+
+/* Table styles */
+::ng-deep .ant-table-thead > tr > th {
+  background-color: #fafafa;
+  font-weight: 600;
+}
+
+::ng-deep .ant-table-tbody > tr:hover > td {
+  background-color: #f0f8ff;
+}
+
+/* Card styles */
+::ng-deep .ant-card-head {
+  background-color: #fff;
+  border-bottom: 1px solid #f0f0f0;
+}
+
+::ng-deep .ant-card-body {
+  padding: 16px;
+}
+
+/* Form styles */
+::ng-deep .ant-form-item-label > label {
+  font-weight: 500;
+}
+
+/* Button styles */
+::ng-deep .ant-btn-primary {
+  background-color: #1890ff;
+  border-color: #1890ff;
+}
+
+::ng-deep .ant-btn-primary:hover {
+  background-color: #40a9ff;
+  border-color: #40a9ff;
+}
+
+/* Tag styles */
+::ng-deep .ant-tag {
+  border-radius: 4px;
+  font-size: 12px;
+  padding: 2px 8px;
+}
+
+/* Loading states */
+.loading-overlay {
+  position: relative;
+  min-height: 200px;
+}
+
+/* Selection indicators */
+.selection-info {
+  background-color: #e6f7ff;
+  border: 1px solid #91d5ff;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+}
+
+.selection-info h4 {
+  margin: 0 0 8px 0;
+  color: #1890ff;
+}
+
+.selection-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.selection-item {
+  background-color: #fff;
+  border: 1px solid #d9d9d9;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #666;
+}
+
+/* Post action container */
+.post-action-container {
+  text-align: center;
+  padding: 24px;
+  background-color: #fff;
+  border-radius: 8px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+} 

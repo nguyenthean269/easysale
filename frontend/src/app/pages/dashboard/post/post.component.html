@@ -1,0 +1,187 @@
+<div class="post-dashboard">
+  <nz-card nzTitle="Đăng bài lên Facebook" [nzExtra]="extraTemplate">
+    <div class="dashboard-content">
+      <!-- Two columns layout -->
+      <div class="columns-container">
+        <!-- Left column: Posts -->
+        <div class="column">
+          <nz-card nzTitle="Danh sách bài viết" [nzExtra]="postsExtraTemplate">
+            <nz-spin [nzSpinning]="postsLoading">
+              <nz-table 
+                #postsTable 
+                [nzData]="posts" 
+                [nzPageSize]="postsPageSize"
+                [nzTotal]="postsTotal"
+                [nzPageIndex]="postsPage"
+                (nzPageIndexChange)="onPostsPageChange($event)"
+                [nzShowPagination]="false"
+                [nzScroll]="{ y: '400px' }">
+                
+                <thead>
+                  <tr>
+                    <th nzWidth="50px">
+                      <input type="checkbox" 
+                        [indeterminate]="selectedPosts.length > 0 && selectedPosts.length < posts.length"
+                        [checked]="selectedPosts.length === posts.length && posts.length > 0"
+                        (change)="onAllPostsSelectionChangeEvent($event)">
+                    </th>
+                    <th>Nội dung</th>
+                    <th nzWidth="100px">Trạng thái</th>
+                    <th nzWidth="120px">Ngày tạo</th>
+                  </tr>
+                </thead>
+                
+                <tbody>
+                  <tr *ngFor="let post of postsTable.data">
+                    <td>
+                      <input type="checkbox" 
+                        [checked]="isPostSelected(post)"
+                        (change)="onPostSelectionChangeEvent($event, post)">
+                    </td>
+                    <td>
+                      <div class="post-content">
+                        <div class="post-text">{{ post.content | slice:0:100 }}{{ post.content.length > 100 ? '...' : '' }}</div>
+                      </div>
+                    </td>
+                    <td>
+                      <nz-tag [nzColor]="getStatusTag(post.status)">
+                        {{ getStatusText(post.status) }}
+                      </nz-tag>
+                    </td>
+                    <td>
+                      {{ post.created_at | date:'dd/MM/yyyy' }}
+                    </td>
+                  </tr>
+                </tbody>
+              </nz-table>
+              
+              <div class="pagination-container">
+                <nz-pagination 
+                  [nzPageIndex]="postsPage"
+                  [nzPageSize]="postsPageSize"
+                  [nzTotal]="postsTotal"
+                  (nzPageIndexChange)="onPostsPageChange($event)">
+                </nz-pagination>
+              </div>
+            </nz-spin>
+          </nz-card>
+        </div>
+
+        <!-- Right column: Facebook Pages -->
+        <div class="column">
+          <nz-card nzTitle="Danh sách Facebook Pages" [nzExtra]="pagesExtraTemplate">
+            <nz-spin [nzSpinning]="facebookPagesLoading">
+              <nz-table 
+                #pagesTable 
+                [nzData]="facebookPages" 
+                [nzPageSize]="facebookPagesPageSize"
+                [nzTotal]="facebookPagesTotal"
+                [nzPageIndex]="facebookPagesPage"
+                (nzPageIndexChange)="onFacebookPagesPageChange($event)"
+                [nzShowPagination]="false"
+                [nzScroll]="{ y: '400px' }">
+                
+                <thead>
+                  <tr>
+                    <th nzWidth="50px">
+                      <input type="checkbox" 
+                        [indeterminate]="selectedFacebookPages.length > 0 && selectedFacebookPages.length < facebookPages.length"
+                        [checked]="selectedFacebookPages.length === facebookPages.length && facebookPages.length > 0"
+                        (change)="onAllFacebookPagesSelectionChangeEvent($event)">
+                    </th>
+                    <th>Tên Page</th>
+                    <th nzWidth="100px">Trạng thái</th>
+                    <th nzWidth="120px">Ngày tạo</th>
+                  </tr>
+                </thead>
+                
+                <tbody>
+                  <tr *ngFor="let page of pagesTable.data">
+                    <td>
+                      <input type="checkbox" 
+                        [checked]="isFacebookPageSelected(page)"
+                        (change)="onFacebookPageSelectionChangeEvent($event, page)">
+                    </td>
+                    <td>
+                      <div class="page-info">
+                        <div class="page-name">{{ page.page_name }}</div>
+                        <div class="page-id">ID: {{ page.page_id }}</div>
+                      </div>
+                    </td>
+                    <td>
+                      <nz-tag [nzColor]="getPageStatusTag(page.status)">
+                        {{ getPageStatusText(page.status) }}
+                      </nz-tag>
+                    </td>
+                    <td>
+                      {{ page.created_at | date:'dd/MM/yyyy' }}
+                    </td>
+                  </tr>
+                </tbody>
+              </nz-table>
+              
+              <div class="pagination-container">
+                <nz-pagination 
+                  [nzPageIndex]="facebookPagesPage"
+                  [nzPageSize]="facebookPagesPageSize"
+                  [nzTotal]="facebookPagesTotal"
+                  (nzPageIndexChange)="onFacebookPagesPageChange($event)">
+                </nz-pagination>
+              </div>
+            </nz-spin>
+          </nz-card>
+        </div>
+      </div>
+
+      <!-- Post action section -->
+      <nz-divider></nz-divider>
+      
+      <div class="post-action-container">
+        <nz-space>
+          <button 
+            nz-button 
+            nzType="primary" 
+            nzSize="large"
+            [nzLoading]="postingLoading"
+            [disabled]="selectedPosts.length === 0 || selectedFacebookPages.length === 0"
+            (click)="postToFacebook()">
+            <span nz-icon nzType="facebook" nzTheme="outline"></span>
+            Đăng bài lên Facebook
+          </button>
+          <button 
+            nz-button 
+            nzSize="large"
+            (click)="resetForm()">
+            <span nz-icon nzType="reload" nzTheme="outline"></span>
+            Làm mới
+          </button>
+        </nz-space>
+      </div>
+    </div>
+  </nz-card>
+</div>
+
+<!-- Templates -->
+<ng-template #extraTemplate>
+  <nz-space>
+    <span>Đã chọn: {{ selectedPosts.length }} bài viết, {{ selectedFacebookPages.length }} Facebook pages</span>
+  </nz-space>
+</ng-template>
+
+<ng-template #postsExtraTemplate>
+  <nz-space>
+    <button nz-button nzSize="small" (click)="loadPosts()">
+      <span nz-icon nzType="reload" nzTheme="outline"></span>
+      Làm mới
+    </button>
+  </nz-space>
+</ng-template>
+
+<ng-template #pagesExtraTemplate>
+  <nz-space>
+    <button nz-button nzSize="small" (click)="loadFacebookPages()">
+      <span nz-icon nzType="reload" nzTheme="outline"></span>
+      Làm mới
+    </button>
+  </nz-space>
+</ng-template> 

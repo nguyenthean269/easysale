@@ -1,0 +1,422 @@
+from flask import Blueprint, jsonify, request
+from flask_jwt_extended import jwt_required, get_jwt_identity
+from utils.permissions import require_roles
+from utils.rate_limit import apply_rate_limit
+from utils.facebook_service import FacebookService
+from models import FacebookPage
+from models import db
+
+facebook_pages_bp = Blueprint('facebook_pages', __name__)
+
+@facebook_pages_bp.route('/', methods=['GET'])
+@jwt_required()
+@require_roles('user', 'manager', 'admin')
+@apply_rate_limit("30 per minute")
+def list_facebook_pages():
+    """
+    Lấy danh sách tất cả Facebook pages
+    """
+    try:
+        # Lấy tham số query
+        page = request.args.get('page', 1, type=int)
+        per_page = request.args.get('per_page', 10, type=int)
+        status = request.args.get('status')  # 'true' hoặc 'false'
+        
+        # Xây dựng query
+        query = FacebookPage.query
+        
+        # Lọc theo status nếu có
+        if status is not None:
+            status_bool = status.lower() == 'true'
+            query = query.filter(FacebookPage.status == status_bool)
+        
+        # Sắp xếp theo thời gian tạo mới nhất
+        query = query.order_by(FacebookPage.created_at.desc())
+        
+        # Phân trang
+        pagination = query.paginate(
+            page=page, 
+            per_page=per_page, 
+            error_out=False
+        )
+        
+        facebook_pages = pagination.items
+        
+        return jsonify({
+            'success': True,
+            'data': {
+                'facebook_pages': [page.to_dict() for page in facebook_pages],
+                'pagination': {
+                    'page': page,
+                    'per_page': per_page,
+                    'total': pagination.total,
+                    'pages': pagination.pages,
+                    'has_next': pagination.has_next,
+                    'has_prev': pagination.has_prev
+                }
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Lỗi khi lấy danh sách Facebook pages',
+            'message': str(e)
+        }), 500
+
+@facebook_pages_bp.route('/<int:page_id>', methods=['GET'])
+@jwt_required()
+@require_roles('user', 'manager', 'admin')
+@apply_rate_limit("30 per minute")
+def get_facebook_page_detail(page_id):
+    """
+    Lấy chi tiết Facebook page theo ID
+    """
+    try:
+        facebook_page = FacebookPage.query.get(page_id)
+        
+        if not facebook_page:
+            return jsonify({
+                'error': 'Không tìm thấy Facebook page',
+                'message': f'Facebook page với ID {page_id} không tồn tại'
+            }), 404
+        
+        return jsonify({
+            'success': True,
+            'data': facebook_page.to_dict()
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Lỗi khi lấy chi tiết Facebook page',
+            'message': str(e)
+        }), 500
+
+@facebook_pages_bp.route('/', methods=['POST'])
+@jwt_required()
+@require_roles('manager', 'admin')
+@apply_rate_limit("10 per minute")
+def create_facebook_page():
+    """
+    Tạo Facebook page mới
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Dữ liệu không được cung cấp'}), 400
+        
+        page_id = data.get('page_id')
+        page_name = data.get('page_name')
+        page_access_token = data.get('page_access_token')
+        status = data.get('status', True)  # Default là True
+        
+        # Validate required fields
+        if not page_id:
+            return jsonify({'error': 'Page ID là bắt buộc'}), 400
+        
+        if not page_name:
+            return jsonify({'error': 'Page name là bắt buộc'}), 400
+        
+        if not page_access_token:
+            return jsonify({'error': 'Page access token là bắt buộc'}), 400
+        
+        # Kiểm tra xem page_id đã tồn tại chưa
+        existing_page = FacebookPage.query.filter_by(page_id=page_id).first()
+        if existing_page:
+            return jsonify({
+                'error': 'Page ID đã tồn tại',
+                'message': f'Facebook page với page_id {page_id} đã được đăng ký'
+            }), 400
+        
+        # Tạo Facebook page mới
+        new_facebook_page = FacebookPage(
+            page_id=page_id,
+            page_name=page_name,
+            page_access_token=page_access_token,
+            status=status
+        )
+        
+        db.session.add(new_facebook_page)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Tạo Facebook page thành công',
+            'data': new_facebook_page.to_dict()
+        }), 201
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Lỗi khi tạo Facebook page',
+            'message': str(e)
+        }), 500
+
+@facebook_pages_bp.route('/<int:page_id>', methods=['PUT'])
+@jwt_required()
+@require_roles('manager', 'admin')
+@apply_rate_limit("10 per minute")
+def update_facebook_page(page_id):
+    """
+    Cập nhật Facebook page
+    """
+    try:
+        facebook_page = FacebookPage.query.get(page_id)
+        
+        if not facebook_page:
+            return jsonify({
+                'error': 'Không tìm thấy Facebook page',
+                'message': f'Facebook page với ID {page_id} không tồn tại'
+            }), 404
+        
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({'error': 'Dữ liệu không được cung cấp'}), 400
+        
+        # Cập nhật các trường
+        if 'page_id' in data:
+            # Kiểm tra xem page_id mới có trùng với page khác không
+            existing_page = FacebookPage.query.filter_by(page_id=data['page_id']).first()
+            if existing_page and existing_page.id != page_id:
+                return jsonify({
+                    'error': 'Page ID đã tồn tại',
+                    'message': f'Facebook page với page_id {data["page_id"]} đã được đăng ký'
+                }), 400
+            facebook_page.page_id = data['page_id']
+        
+        if 'page_name' in data:
+            facebook_page.page_name = data['page_name']
+        
+        if 'page_access_token' in data:
+            facebook_page.page_access_token = data['page_access_token']
+        
+        if 'status' in data:
+            facebook_page.status = data['status']
+        
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Cập nhật Facebook page thành công',
+            'data': facebook_page.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Lỗi khi cập nhật Facebook page',
+            'message': str(e)
+        }), 500
+
+@facebook_pages_bp.route('/<int:page_id>', methods=['DELETE'])
+@jwt_required()
+@require_roles('admin')
+@apply_rate_limit("5 per minute")
+def delete_facebook_page(page_id):
+    """
+    Xóa Facebook page
+    """
+    try:
+        facebook_page = FacebookPage.query.get(page_id)
+        
+        if not facebook_page:
+            return jsonify({
+                'error': 'Không tìm thấy Facebook page',
+                'message': f'Facebook page với ID {page_id} không tồn tại'
+            }), 404
+        
+        db.session.delete(facebook_page)
+        db.session.commit()
+        
+        return jsonify({
+            'success': True,
+            'message': 'Xóa Facebook page thành công'
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Lỗi khi xóa Facebook page',
+            'message': str(e)
+        }), 500
+
+@facebook_pages_bp.route('/<int:page_id>/toggle-status', methods=['PUT'])
+@jwt_required()
+@require_roles('manager', 'admin')
+@apply_rate_limit("10 per minute")
+def toggle_facebook_page_status(page_id):
+    """
+    Bật/tắt trạng thái Facebook page
+    """
+    try:
+        facebook_page = FacebookPage.query.get(page_id)
+        
+        if not facebook_page:
+            return jsonify({
+                'error': 'Không tìm thấy Facebook page',
+                'message': f'Facebook page với ID {page_id} không tồn tại'
+            }), 404
+        
+        # Đảo ngược trạng thái
+        facebook_page.status = not facebook_page.status
+        
+        db.session.commit()
+        
+        status_text = "bật" if facebook_page.status else "tắt"
+        
+        return jsonify({
+            'success': True,
+            'message': f'Đã {status_text} Facebook page thành công',
+            'data': facebook_page.to_dict()
+        })
+        
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({
+            'error': 'Lỗi khi thay đổi trạng thái Facebook page',
+            'message': str(e)
+        }), 500
+
+@facebook_pages_bp.route('/<int:page_id>/post', methods=['POST'])
+@jwt_required()
+@require_roles('manager', 'admin')
+@apply_rate_limit("5 per minute")
+def create_facebook_post(page_id):
+    """
+    Đăng bài lên Facebook page
+    """
+    try:
+        # Kiểm tra Facebook page có tồn tại và active không
+        facebook_page = FacebookPage.query.get(page_id)
+        if not facebook_page:
+            return jsonify({
+                'error': 'Không tìm thấy Facebook page',
+                'message': f'Facebook page với ID {page_id} không tồn tại'
+            }), 404
+        
+        if not facebook_page.status:
+            return jsonify({
+                'error': 'Facebook page không hoạt động',
+                'message': 'Facebook page này đã bị tắt. Vui lòng bật lại để đăng bài.'
+            }), 400
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Dữ liệu không được cung cấp'}), 400
+        
+        message = data.get('message')
+        if not message:
+            return jsonify({'error': 'Nội dung bài viết là bắt buộc'}), 400
+        
+        link = data.get('link')
+        image_url = data.get('image_url')
+        
+        # Khởi tạo Facebook service
+        facebook_service = FacebookService()
+        
+        # Đăng bài lên Facebook
+        if image_url:
+            # Đăng bài có hình ảnh
+            result = facebook_service.create_post_with_image(
+                page_id=facebook_page.page_id,
+                message=message,
+                image_url=image_url
+            )
+        else:
+            # Đăng bài thường
+            result = facebook_service.create_post(
+                page_id=facebook_page.page_id,
+                message=message,
+                link=link,
+                image_url=image_url
+            )
+        
+        if result['success']:
+            return jsonify({
+                'success': True,
+                'message': 'Đăng bài lên Facebook thành công',
+                'data': {
+                    'post_id': result['post_id'],
+                    'facebook_page_id': facebook_page.page_id,
+                    'facebook_page_name': facebook_page.page_name,
+                    'message': message,
+                    'link': link,
+                    'image_url': image_url,
+                    'facebook_response': result.get('facebook_response', {})
+                }
+            })
+        else:
+            return jsonify({
+                'error': 'Lỗi khi đăng bài lên Facebook',
+                'message': result['message'],
+                'facebook_response': result.get('facebook_response', {})
+            }), 500
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Lỗi khi đăng bài lên Facebook',
+            'message': str(e)
+        }), 500
+
+@facebook_pages_bp.route('/<int:page_id>/post-schedule', methods=['POST'])
+@jwt_required()
+@require_roles('manager', 'admin')
+@apply_rate_limit("3 per minute")
+def schedule_facebook_post(page_id):
+    """
+    Lên lịch đăng bài lên Facebook page (tính năng mở rộng)
+    """
+    try:
+        # Kiểm tra Facebook page có tồn tại và active không
+        facebook_page = FacebookPage.query.get(page_id)
+        if not facebook_page:
+            return jsonify({
+                'error': 'Không tìm thấy Facebook page',
+                'message': f'Facebook page với ID {page_id} không tồn tại'
+            }), 404
+        
+        if not facebook_page.status:
+            return jsonify({
+                'error': 'Facebook page không hoạt động',
+                'message': 'Facebook page này đã bị tắt. Vui lòng bật lại để đăng bài.'
+            }), 400
+        
+        data = request.get_json()
+        if not data:
+            return jsonify({'error': 'Dữ liệu không được cung cấp'}), 400
+        
+        message = data.get('message')
+        if not message:
+            return jsonify({'error': 'Nội dung bài viết là bắt buộc'}), 400
+        
+        scheduled_time = data.get('scheduled_time')  # ISO format: "2024-01-01T10:00:00"
+        if not scheduled_time:
+            return jsonify({'error': 'Thời gian lên lịch là bắt buộc'}), 400
+        
+        link = data.get('link')
+        image_url = data.get('image_url')
+        
+        # TODO: Implement scheduling logic
+        # Có thể sử dụng Celery hoặc APScheduler để lên lịch
+        # Hiện tại chỉ trả về thông tin lên lịch
+        
+        return jsonify({
+            'success': True,
+            'message': 'Đã lên lịch đăng bài thành công',
+            'data': {
+                'facebook_page_id': facebook_page.page_id,
+                'facebook_page_name': facebook_page.page_name,
+                'message': message,
+                'scheduled_time': scheduled_time,
+                'link': link,
+                'image_url': image_url,
+                'note': 'Tính năng lên lịch đang được phát triển'
+            }
+        })
+        
+    except Exception as e:
+        return jsonify({
+            'error': 'Lỗi khi lên lịch đăng bài',
+            'message': str(e)
+        }), 500 

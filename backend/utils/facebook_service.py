@@ -366,4 +366,138 @@ class FacebookService:
             return [page.to_dict() for page in pages]
         except Exception as e:
             logger.error(f"Error getting active pages: {e}")
-            return [] 
+            return []
+    
+    def create_post(self, page_id: str, message: str, link: Optional[str] = None, 
+                   image_url: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Create a post on Facebook page
+        """
+        try:
+            # Get page access token
+            page_access_token = self.get_page_access_token(page_id)
+            if not page_access_token:
+                return {
+                    'success': False,
+                    'message': 'No valid page access token found',
+                    'post_id': None
+                }
+            
+            # Prepare post data
+            post_data = {
+                'message': message
+            }
+            
+            # Add link if provided
+            if link:
+                post_data['link'] = link
+            
+            # Add image if provided
+            if image_url:
+                post_data['picture'] = image_url
+            
+            # Create post on Facebook
+            url = f"{self.base_url}/{page_id}/feed"
+            params = {'access_token': page_access_token}
+            
+            response = requests.post(url, json=post_data, params=params)
+            response_data = response.json()
+            
+            if response.status_code == 200 and 'id' in response_data:
+                post_id = response_data['id']
+                logger.info(f"Post created successfully on page {page_id}: {post_id}")
+                return {
+                    'success': True,
+                    'message': 'Post created successfully',
+                    'post_id': post_id,
+                    'facebook_response': response_data
+                }
+            else:
+                error_msg = response_data.get('error', {}).get('message', 'Unknown error')
+                logger.error(f"Failed to create post: {error_msg}")
+                return {
+                    'success': False,
+                    'message': f'Failed to create post: {error_msg}',
+                    'post_id': None,
+                    'facebook_response': response_data
+                }
+                
+        except Exception as e:
+            logger.error(f"Error creating Facebook post: {e}")
+            return {
+                'success': False,
+                'message': f'Error creating post: {str(e)}',
+                'post_id': None
+            }
+    
+    def create_post_with_image(self, page_id: str, message: str, image_url: str) -> Dict[str, Any]:
+        """
+        Create a post with image on Facebook page
+        """
+        try:
+            # Get page access token
+            page_access_token = self.get_page_access_token(page_id)
+            if not page_access_token:
+                return {
+                    'success': False,
+                    'message': 'No valid page access token found',
+                    'post_id': None
+                }
+            
+            # First, upload the image
+            image_data = {
+                'url': image_url
+            }
+            
+            upload_url = f"{self.base_url}/{page_id}/photos"
+            params = {'access_token': page_access_token}
+            
+            upload_response = requests.post(upload_url, json=image_data, params=params)
+            upload_data = upload_response.json()
+            
+            if upload_response.status_code != 200 or 'id' not in upload_data:
+                error_msg = upload_data.get('error', {}).get('message', 'Unknown error')
+                logger.error(f"Failed to upload image: {error_msg}")
+                return {
+                    'success': False,
+                    'message': f'Failed to upload image: {error_msg}',
+                    'post_id': None
+                }
+            
+            # Then create post with the uploaded image
+            post_data = {
+                'message': message,
+                'attached_media': [{'media_fbid': upload_data['id']}]
+            }
+            
+            post_url = f"{self.base_url}/{page_id}/feed"
+            post_response = requests.post(post_url, json=post_data, params=params)
+            post_data_response = post_response.json()
+            
+            if post_response.status_code == 200 and 'id' in post_data_response:
+                post_id = post_data_response['id']
+                logger.info(f"Post with image created successfully on page {page_id}: {post_id}")
+                return {
+                    'success': True,
+                    'message': 'Post with image created successfully',
+                    'post_id': post_id,
+                    'image_id': upload_data['id'],
+                    'facebook_response': post_data_response
+                }
+            else:
+                error_msg = post_data_response.get('error', {}).get('message', 'Unknown error')
+                logger.error(f"Failed to create post with image: {error_msg}")
+                return {
+                    'success': False,
+                    'message': f'Failed to create post with image: {error_msg}',
+                    'post_id': None,
+                    'facebook_response': post_data_response
+                }
+                
+        except Exception as e:
+            logger.error(f"Error creating Facebook post with image: {e}")
+            return {
+                'success': False,
+                'message': f'Error creating post with image: {str(e)}',
+                'post_id': None
+            } 
