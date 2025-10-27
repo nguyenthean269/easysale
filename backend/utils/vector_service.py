@@ -198,6 +198,35 @@ class VectorService:
         except Exception as e:
             logger.error(f"❌ Error deleting document chunks: {e}")
             raise
+    
+    def add_document_chunk(self, content, chunk_id, source_type='document', source_ref=None):
+        """Thêm document chunk với thông tin source"""
+        try:
+            logger.debug(f"Adding document chunk: chunk_id={chunk_id}, source_type={source_type}")
+            
+            # Tạo embedding
+            embedding = self.create_embedding(content)
+            
+            # Tạo unique ID cho Milvus
+            milvus_id = str(uuid.uuid4())
+            
+            # Insert vào Milvus với thông tin source
+            data = [
+                [milvus_id],
+                [chunk_id],  # document_id trong Milvus sẽ là chunk_id
+                [0],  # chunk_index mặc định
+                [embedding]
+            ]
+            
+            self.collection.insert(data)
+            self.collection.flush()
+            
+            logger.info(f"✅ Added document chunk {milvus_id} to Milvus")
+            return milvus_id
+            
+        except Exception as e:
+            logger.error(f"❌ Error adding document chunk: {e}")
+            raise
 
 # Global instance
 vector_service = None

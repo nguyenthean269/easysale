@@ -127,6 +127,8 @@ def login():
         }), 200
         
     except Exception as e:
+        db.session.rollback()
+        print(f"Login error: {str(e)}")  # Log error for debugging
         return jsonify({'error': 'Lỗi server, vui lòng thử lại sau'}), 500
 
 @auth_bp.route('/permissions', methods=['GET'])
@@ -152,6 +154,7 @@ def get_user_permissions():
         }), 200
         
     except Exception as e:
+        print(f'Permissions error: {str(e)}')  # Log error for debugging
         return jsonify({'error': 'Không thể lấy thông tin permissions'}), 500
 
 @auth_bp.route('/rate-limit-status', methods=['GET'])
@@ -166,6 +169,7 @@ def get_rate_limit_status():
             'data': info
         }), 200
     except Exception as e:
+        print(f'Rate limit error: {str(e)}')  # Log error for debugging
         return jsonify({'error': 'Không thể lấy thông tin rate limit'}), 500
 
 @auth_bp.route('/profile', methods=['GET'])
@@ -183,6 +187,7 @@ def get_profile():
         return jsonify({'user': user.to_dict()}), 200
         
     except Exception as e:
+        print(f'Profile error: {str(e)}')  # Log error for debugging
         return jsonify({'error': 'Lỗi server, vui lòng thử lại sau'}), 500
 
 @auth_bp.route('/refresh', methods=['POST'])
@@ -219,6 +224,7 @@ def refresh():
         }), 200
         
     except Exception as e:
+        print(f'Refresh token error: {str(e)}')  # Log error for debugging
         return jsonify({'error': 'Lỗi server, vui lòng thử lại sau'}), 500
 
 @auth_bp.route('/logout', methods=['POST'])
@@ -238,4 +244,5 @@ def logout():
         }), 200
         
     except Exception as e:
+        print(f'Logout error: {str(e)}')  # Log error for debugging
         return jsonify({'error': 'Lỗi server, vui lòng thử lại sau'}), 500 

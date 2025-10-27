@@ -6,6 +6,7 @@ from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
 from models import db
 from config import get_config, validate_config
+from services.zalo_message_processor import zalo_processor
 
 # Khởi tạo app
 app = Flask(__name__)
@@ -49,6 +50,7 @@ from routes.user import user_bp
 from routes.facebook import facebook_bp
 from routes.content import content_bp
 from routes.posts import posts_bp
+from routes.zalo_chunks import zalo_chunks_bp
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(admin_bp, url_prefix='/admin')
@@ -56,6 +58,53 @@ app.register_blueprint(user_bp, url_prefix='/user')
 app.register_blueprint(facebook_bp, url_prefix='/facebook')
 app.register_blueprint(content_bp, url_prefix='/content')
 app.register_blueprint(posts_bp, url_prefix='/posts')
+app.register_blueprint(zalo_chunks_bp, url_prefix='/zalo-chunks')
+
+# API endpoints cho Zalo Message Processor
+@app.route('/api/zalo-processor/status', methods=['GET'])
+def zalo_processor_status():
+    """Lấy trạng thái của Zalo Message Processor"""
+    try:
+        status = zalo_processor.get_status()
+        return {
+            'success': True,
+            'data': status
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e)
+        }, 500
+
+@app.route('/api/zalo-processor/start', methods=['POST'])
+def zalo_processor_start():
+    """Khởi động Zalo Message Processor"""
+    try:
+        zalo_processor.start()
+        return {
+            'success': True,
+            'message': 'Zalo Message Processor started successfully'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e)
+        }, 500
+
+@app.route('/api/zalo-processor/stop', methods=['POST'])
+def zalo_processor_stop():
+    """Dừng Zalo Message Processor"""
+    try:
+        zalo_processor.stop()
+        return {
+            'success': True,
+            'message': 'Zalo Message Processor stopped successfully'
+        }
+    except Exception as e:
+        return {
+            'success': False,
+            'error': str(e)
+        }, 500
 
 # Error handler cho JWT
 @jwt.invalid_token_loader
@@ -141,4 +190,16 @@ if __name__ == '__main__':
     print(f"   Server: http://{host}:{port}")
     print(f"   Debug: {debug}")
     
-    app.run(host=host, port=port, debug=debug) 
+    # Khởi động Zalo Message Processor service
+    try:
+        zalo_processor.start()
+        print("✅ Zalo Message Processor service started")
+    except Exception as e:
+        print(f"❌ Failed to start Zalo Message Processor: {e}")
+    
+    try:
+        app.run(host=host, port=port, debug=debug)
+    finally:
+        # Dừng service khi app shutdown
+        zalo_processor.stop()
+        print("🛑 Zalo Message Processor service stopped") 

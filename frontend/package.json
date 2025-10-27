@@ -6,8 +6,7 @@
     "start": "ng serve",
     "build": "ng build",
     "watch": "ng build --watch --configuration development",
-    "test": "ng test",
-    "serve:ssr:easysale-frontend": "node dist/easysale-frontend/server/server.mjs"
+    "test": "ng test"
   },
   "private": true,
   "dependencies": {
@@ -17,11 +16,8 @@
     "@angular/forms": "^19.2.0",
     "@angular/platform-browser": "^19.2.0",
     "@angular/platform-browser-dynamic": "^19.2.0",
-    "@angular/platform-server": "^19.2.0",
     "@angular/router": "^19.2.0",
-    "@angular/ssr": "^19.2.0",
     "@ctrl/tinycolor": "^4.1.0",
-    "express": "^4.18.2",
     "ng-zorro-antd": "^19.3.1",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
@@ -31,7 +27,6 @@
     "@angular-devkit/build-angular": "^19.2.0",
     "@angular/cli": "^19.2.0",
     "@angular/compiler-cli": "^19.2.0",
-    "@types/express": "^4.17.17",
     "@types/jasmine": "~5.1.0",
     "@types/node": "^18.18.0",
     "autoprefixer": "^10.4.21",

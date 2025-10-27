@@ -1,7 +1,6 @@
 import { Component, OnInit } from '@angular/core';
 import { RouterOutlet, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { CommonModule } from '@angular/common';
-import { SsrService } from '../../services/ssr.service';
 import { AuthService } from '../../services/auth.service';
 import { NzLayoutModule } from 'ng-zorro-antd/layout';
 import { NzMenuModule } from 'ng-zorro-antd/menu';
@@ -69,6 +68,12 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
                  class="flex items-center px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
                 <span class="mr-3">📝</span>
                 <span>Đăng Bài Facebook</span>
+              </a>
+              
+              <a routerLink="/dashboard/zalo-chunks" routerLinkActive="bg-blue-100 text-blue-600"
+                 class="flex items-center px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
+                <span class="mr-3">💬</span>
+                <span>Zalo Chunks</span>
               </a>
               
               <a routerLink="/dashboard/products" routerLinkActive="bg-blue-100 text-blue-600"
@@ -139,15 +144,11 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
 export class AdminLayoutComponent implements OnInit {
   constructor(
     private router: Router,
-    private ssrService: SsrService,
     public authService: AuthService
   ) {}
 
   ngOnInit() {
-    // Đảm bảo dashboard routes chỉ chạy trên client
-    if (this.ssrService.isServer() && this.ssrService.isDashboardRoute(this.router.url)) {
-      console.log('Dashboard route detected on server - should be client-side only');
-    }
+    // Component initialization
   }
 
   logout(): void {
