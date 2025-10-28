@@ -50,7 +50,8 @@ from routes.user import user_bp
 from routes.facebook import facebook_bp
 from routes.content import content_bp
 from routes.posts import posts_bp
-from routes.zalo_chunks import zalo_chunks_bp
+from routes.zalo_test import zalo_test_bp
+from routes.warehouse import warehouse_bp
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(admin_bp, url_prefix='/admin')
@@ -58,7 +59,8 @@ app.register_blueprint(user_bp, url_prefix='/user')
 app.register_blueprint(facebook_bp, url_prefix='/facebook')
 app.register_blueprint(content_bp, url_prefix='/content')
 app.register_blueprint(posts_bp, url_prefix='/posts')
-app.register_blueprint(zalo_chunks_bp, url_prefix='/zalo-chunks')
+app.register_blueprint(zalo_test_bp, url_prefix='/api/zalo-test')
+app.register_blueprint(warehouse_bp, url_prefix='/warehouse')
 
 # API endpoints cho Zalo Message Processor
 @app.route('/api/zalo-processor/status', methods=['GET'])

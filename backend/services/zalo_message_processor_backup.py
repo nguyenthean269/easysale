@@ -109,8 +109,7 @@ class ZaloMessageProcessor:
                     retry_delay *= 2  # Exponential backoff
                 else:
                     logger.error("❌ Failed to connect to zalo database after all retries")
-        
-        return None
+                    return None
     
     def get_warehouse_db_connection(self):
         """Tạo kết nối database warehouse với retry mechanism"""
@@ -137,8 +136,7 @@ class ZaloMessageProcessor:
                     retry_delay *= 2  # Exponential backoff
                 else:
                     logger.error("❌ Failed to connect to warehouse database after all retries")
-        
-        return None
+                    return None
     
     def get_unprocessed_messages(self, limit: int = 20) -> List[Dict]:
         """
@@ -545,7 +543,7 @@ class ZaloMessageProcessor:
         logger.warning(f"Unit type '{unit_type_name}' not found in mapping")
         return None
     
-    def insert_apartment_via_api(self, apartment_data: Dict) -> bool:
+    def insert_apartment_via_api(self, apartment_data: Dict) -> tuple[bool, int | None]:
         """
         Insert apartment vào warehouse database thông qua API
         
@@ -553,7 +551,7 @@ class ZaloMessageProcessor:
             apartment_data: Dữ liệu căn hộ từ Groq
             
         Returns:
-            True nếu thành công, False nếu lỗi
+            Tuple (success: bool, apartment_id: int | None)
         """
         try:
             import requests
@@ -601,14 +599,15 @@ class ZaloMessageProcessor:
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success'):
-                    logger.info(f"✅ Successfully inserted apartment via API: {apartment_record.get('unit_code', 'N/A')}")
-                    return True
+                    apartment_id = result.get('data', {}).get('apartment_id')
+                    logger.info(f"✅ Successfully inserted apartment via API: {apartment_record.get('unit_code', 'N/A')} (ID: {apartment_id})")
+                    return True, apartment_id
                 else:
                     logger.error(f"❌ API returned error: {result.get('error')}")
-                    return False
+                    return False, None
             else:
                 logger.error(f"❌ API request failed with status {response.status_code}: {response.text}")
-                return False
+                return False, None
                 
         except Exception as e:
             logger.error(f"❌ Error calling warehouse API: {str(e)}")
@@ -616,34 +615,7 @@ class ZaloMessageProcessor:
             logger.error(f"❌ Error details: {e}")
             import traceback
             logger.error(f"❌ Full traceback: {traceback.format_exc()}")
-            return False
-        """
-        Insert hoặc update apartment vào warehouse database
-        
-        Args:
-            apartment_data: Dữ liệu căn hộ từ Groq
-            
-        Returns:
-            True nếu thành công, False nếu lỗi
-        """
-        try:
-            with warehouse_app.app_context():
-                connection = self.get_warehouse_db_connection()
-                if not connection:
-                    return False
-                
-                from sqlalchemy import text
-                # Map unit_type name sang ID
-                unit_type_id = None
-                if apartment_data.get('unit_type'):
-                    unit_type_id = self.map_unit_type_to_id(apartment_data['unit_type'])
-                
-                # Chuẩn bị dữ liệu với hardcode values
-                apartment_record = {
-                    'property_group': 1,  # Hardcode
-                    'unit_type': unit_type_id,
-                    'unit_code': apartment_data.get('unit_code'),
-                    'unit_axis': apartment_data.get('unit_axis'),
+            return False, None
                     'unit_floor_number': apartment_data.get('unit_floor_number'),
                     'area_land': apartment_data.get('area_land'),
                     'area_construction': apartment_data.get('area_construction'),
@@ -759,20 +731,20 @@ class ZaloMessageProcessor:
                     if not connection:
                         logger.error(f"No database connection available (attempt {attempt + 1})")
                         continue
-                
-                from sqlalchemy import text
-                query = text("""
-                UPDATE received_messages 
-                SET status_push_warehouse = :status 
-                WHERE id = :message_id
-                """)
-                
-                connection.execute(query, {"status": status, "message_id": message_id})
-                connection.commit()
-                
-                logger.info(f"✅ Updated message {message_id} status to {status}")
-                return True
-                
+                    
+                    from sqlalchemy import text
+                    query = text("""
+                    UPDATE received_messages 
+                    SET status_push_warehouse = :status 
+                    WHERE id = :message_id
+                    """)
+                    
+                    connection.execute(query, {"status": status, "message_id": message_id})
+                    connection.commit()
+                    
+                    logger.info(f"✅ Updated message {message_id} status to {status}")
+                    return True
+                    
             except Exception as e:
                 logger.error(f"❌ Error updating message status (attempt {attempt + 1}): {e}")
                 logger.error(f"Error type: {type(e)}")
@@ -783,7 +755,7 @@ class ZaloMessageProcessor:
                     retry_delay *= 2  # Exponential backoff
                 else:
                     logger.error("❌ Failed to update message status after all retries")
-                return False
+                    return False
                     
             finally:
                 if connection:

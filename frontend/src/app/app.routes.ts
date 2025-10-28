@@ -8,7 +8,7 @@ import { ProductsComponent } from './pages/products/products.component';
 import { LoginComponent } from './pages/login/login.component';
 import { ContentGenerateComponent } from './pages/content-generate/content-generate.component';
 import { PostComponent } from './pages/dashboard/post/post.component';
-import { ZaloChunksComponent } from './pages/zalo-chunks/zalo-chunks.component';
+import { ZaloTestComponent } from './pages/zalo-test/zalo-test.component';
 
 export const routes: Routes = [
   // Dashboard routes with admin layout (no SSR)
@@ -20,7 +20,7 @@ export const routes: Routes = [
       { path: 'documents', component: UsersComponent },
       { path: 'content-generate', component: ContentGenerateComponent },
       { path: 'post', component: PostComponent },
-      { path: 'zalo-chunks', component: ZaloChunksComponent },
+      { path: 'zalo-test', component: ZaloTestComponent },
       { path: 'products', component: DashboardComponent }, // Placeholder
       { path: 'orders', component: DashboardComponent }, // Placeholder
       { path: 'settings', component: DashboardComponent }, // Placeholder

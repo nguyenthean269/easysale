@@ -70,11 +70,12 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
                 <span>Đăng Bài Facebook</span>
               </a>
               
-              <a routerLink="/dashboard/zalo-chunks" routerLinkActive="bg-blue-100 text-blue-600"
+              <a routerLink="/dashboard/zalo-test" routerLinkActive="bg-blue-100 text-blue-600"
                  class="flex items-center px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
-                <span class="mr-3">💬</span>
-                <span>Zalo Chunks</span>
+                <span class="mr-3">🧪</span>
+                <span>Zalo Test</span>
               </a>
+              
               
               <a routerLink="/dashboard/products" routerLinkActive="bg-blue-100 text-blue-600"
                  class="flex items-center px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
