@@ -25,6 +25,7 @@ def test_process_message():
         
         message_id = data.get('message_id')
         message_content = data.get('message_content')
+        real_insert = data.get('real_insert', False)  # Mặc định là False (test mode)
         
         if not message_id and not message_content:
             return jsonify({
@@ -34,8 +35,8 @@ def test_process_message():
         
         # Nếu có message_id, lấy tin nhắn từ database
         if message_id:
-            logger.info(f"Testing message processing for ID: {message_id}")
-            result, error = zalo_processor.run_test_one_mode(message_id)
+            logger.info(f"Testing message processing for ID: {message_id}, real_insert: {real_insert}")
+            result, error = zalo_processor.run_test_one_mode(message_id, real_insert=real_insert)
             
             if error:
                 return jsonify({
@@ -90,16 +91,26 @@ def test_process_message():
 
 @zalo_test_bp.route('/unprocessed-messages', methods=['GET'])
 def get_unprocessed_messages():
-    """Lấy danh sách tin nhắn chưa xử lý"""
+    """Lấy danh sách tin nhắn theo warehouse_id"""
     try:
         limit = request.args.get('limit', 20, type=int)
+        warehouse_id = request.args.get('warehouse_id', 'NULL', type=str)
         
-        messages = zalo_processor.get_unprocessed_messages(limit=limit)
+        # Validate warehouse_id parameter
+        valid_warehouse_ids = ['NULL', 'NOT_NULL', 'ALL']
+        if warehouse_id not in valid_warehouse_ids and not warehouse_id.isdigit():
+            return jsonify({
+                'success': False,
+                'error': f'Invalid warehouse_id. Must be one of: {valid_warehouse_ids} or a specific ID number'
+            }), 400
+        
+        messages = zalo_processor.get_unprocessed_messages(limit=limit, warehouse_id=warehouse_id)
         
         return jsonify({
             'success': True,
             'data': messages,
-            'count': len(messages)
+            'count': len(messages),
+            'warehouse_id_filter': warehouse_id
         })
         
     except Exception as e:

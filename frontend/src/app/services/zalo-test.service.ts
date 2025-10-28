@@ -17,9 +17,19 @@ export interface ZaloTestResponse {
 
 export interface UnprocessedMessage {
   id: number;
+  session_id: number;
+  config_id?: number;
+  sender_id?: string;
+  sender_name?: string;
   content: string;
-  created_at: string;
-  status: string;
+  thread_id?: string;
+  thread_type?: string;
+  received_at: string;
+  status_push_kafka: number;
+  warehouse_id?: number;
+  reply_quote?: string;
+  content_hash?: string;
+  added_document_chunks?: boolean;
 }
 
 export interface ProcessorStatus {
@@ -58,10 +68,10 @@ export class ZaloTestService {
   }
 
   /**
-   * Lấy danh sách tin nhắn chưa xử lý
+   * Lấy danh sách tin nhắn theo warehouse_id
    */
-  getUnprocessedMessages(limit: number = 20): Observable<ZaloTestResponse & { data: UnprocessedMessage[]; count: number }> {
-    return this.http.get<ZaloTestResponse & { data: UnprocessedMessage[]; count: number }>(`${this.apiUrl}/unprocessed-messages?limit=${limit}`);
+  getUnprocessedMessages(limit: number = 20, warehouse_id: string = 'NULL'): Observable<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; warehouse_id_filter: string }> {
+    return this.http.get<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; warehouse_id_filter: string }>(`${this.apiUrl}/unprocessed-messages?limit=${limit}&warehouse_id=${warehouse_id}`);
   }
 
   /**

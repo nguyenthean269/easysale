@@ -30,6 +30,7 @@ CREATE TABLE `apartments` (
   `price_early` decimal(18,0) DEFAULT NULL COMMENT 'Giá thanh toán sớm',
   `price_schedule` decimal(18,0) DEFAULT NULL COMMENT 'Giá thanh toán theo tiến độ',
   `price_loan` decimal(18,0) DEFAULT NULL COMMENT 'Giá nếu vay ngân hàng',
+  `price_rent` decimal(18,0) DEFAULT NULL COMMENT 'Giá thuê',
   `notes` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,
   `status` enum('CHUA_BAN','DA_LOCK','DA_COC','DA_BAN') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Trạng thái giao dịch của căn hộ: CHUA_BAN, DA_LOCK, DA_COC, DA_BAN',
   `unit_allocation` set('QUY_DOC_QUYEN','QUY_AN','QUY_CHEO','QUY_THUONG') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Loại quỹ căn: Quỹ độc quyền, Quỹ ẩn, Quỹ chéo, Quỹ thưởng',

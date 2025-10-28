@@ -7,6 +7,7 @@ import logging
 import pymysql
 import os
 from typing import List, Dict, Any
+from services.warehouse_database_service import warehouse_service
 
 logger = logging.getLogger(__name__)
 
@@ -339,6 +340,191 @@ def test_warehouse_connection():
         
     except Exception as e:
         logger.error(f"Error testing warehouse connection: {e}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@warehouse_bp.route('/api/warehouse/apartments/list', methods=['GET'])
+def get_apartments_list():
+    """
+    Lấy danh sách apartments với thông tin property_group và unit_type
+    Query parameters:
+    - limit: Số lượng records tối đa (default: 100)
+    - offset: Vị trí bắt đầu (default: 0)
+    - property_group_id: Filter theo property_group_id (optional)
+    - unit_type_id: Filter theo unit_type_id (optional)
+    """
+    try:
+        # Lấy query parameters
+        limit = request.args.get('limit', 100, type=int)
+        offset = request.args.get('offset', 0, type=int)
+        property_group_id = request.args.get('property_group_id', type=int)
+        unit_type_id = request.args.get('unit_type_id', type=int)
+        
+        # Validate parameters
+        if limit <= 0 or limit > 1000:
+            return jsonify({
+                'success': False,
+                'error': 'limit must be between 1 and 1000'
+            }), 400
+        
+        if offset < 0:
+            return jsonify({
+                'success': False,
+                'error': 'offset must be >= 0'
+            }), 400
+        
+        logger.info(f"Getting apartments list: limit={limit}, offset={offset}, property_group_id={property_group_id}, unit_type_id={unit_type_id}")
+        
+        # Gọi service method
+        result = warehouse_service.get_apartments_list(
+            limit=limit,
+            offset=offset,
+            property_group_id=property_group_id,
+            unit_type_id=unit_type_id
+        )
+        
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        logger.error(f"Error in get_apartments_list: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@warehouse_bp.route('/api/warehouse/apartments/by-ids', methods=['POST'])
+def get_apartments_by_ids():
+    """
+    Lấy thông tin apartments theo danh sách ID với thông tin property_group và unit_type
+    Body: {"ids": [1, 2, 3, ...]}
+    """
+    try:
+        data = request.get_json()
+        
+        if not data:
+            return jsonify({
+                'success': False,
+                'error': 'No JSON data provided'
+            }), 400
+        
+        apartment_ids = data.get('ids', [])
+        
+        if not isinstance(apartment_ids, list):
+            return jsonify({
+                'success': False,
+                'error': 'ids must be an array'
+            }), 400
+        
+        if not apartment_ids:
+            return jsonify({
+                'success': False,
+                'error': 'ids array cannot be empty'
+            }), 400
+        
+        # Validate that all IDs are integers
+        try:
+            apartment_ids = [int(id) for id in apartment_ids]
+        except (ValueError, TypeError):
+            return jsonify({
+                'success': False,
+                'error': 'All IDs must be integers'
+            }), 400
+        
+        logger.info(f"Getting apartments by IDs: {apartment_ids}")
+        
+        # Gọi service method
+        result = warehouse_service.get_apartments_by_ids(apartment_ids)
+        
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        logger.error(f"Error in get_apartments_by_ids: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@warehouse_bp.route('/api/warehouse/apartments/<int:apartment_id>', methods=['GET'])
+def get_apartment_by_id(apartment_id):
+    """
+    Lấy thông tin apartment theo ID với thông tin property_group và unit_type
+    """
+    try:
+        logger.info(f"Getting apartment by ID: {apartment_id}")
+        
+        # Gọi service method
+        result = warehouse_service.get_apartment_by_id(apartment_id)
+        
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 404
+            
+    except Exception as e:
+        logger.error(f"Error in get_apartment_by_id: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@warehouse_bp.route('/api/warehouse/apartments/search', methods=['GET'])
+def search_apartments():
+    """
+    Tìm kiếm apartments với các điều kiện
+    Query parameters:
+    - q: Từ khóa tìm kiếm (unit_code, property_group_name, unit_type_name)
+    - limit: Số lượng records tối đa (default: 50)
+    - offset: Vị trí bắt đầu (default: 0)
+    """
+    try:
+        # Lấy query parameters
+        search_query = request.args.get('q', '').strip()
+        limit = request.args.get('limit', 50, type=int)
+        offset = request.args.get('offset', 0, type=int)
+        
+        # Validate parameters
+        if limit <= 0 or limit > 500:
+            return jsonify({
+                'success': False,
+                'error': 'limit must be between 1 and 500'
+            }), 400
+        
+        if offset < 0:
+            return jsonify({
+                'success': False,
+                'error': 'offset must be >= 0'
+            }), 400
+        
+        if not search_query:
+            return jsonify({
+                'success': False,
+                'error': 'search query parameter "q" is required'
+            }), 400
+        
+        logger.info(f"Searching apartments: query='{search_query}', limit={limit}, offset={offset}")
+        
+        # Gọi service method với search
+        result = warehouse_service.search_apartments(
+            search_query=search_query,
+            limit=limit,
+            offset=offset
+        )
+        
+        if result['success']:
+            return jsonify(result)
+        else:
+            return jsonify(result), 500
+            
+    except Exception as e:
+        logger.error(f"Error in search_apartments: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

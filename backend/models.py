@@ -452,6 +452,7 @@ class ZaloReceivedMessage(db.Model):
     thread_type = db.Column(db.String(50), nullable=True)
     received_at = db.Column(db.DateTime, nullable=True)
     status_push_kafka = db.Column(db.Integer, default=0)
+    warehouse_id = db.Column(db.BigInteger, nullable=True)  # ID của apartment trong warehouse database
     reply_quote = db.Column(db.Text, nullable=True)
     content_hash = db.Column(db.String(40), nullable=True)  # Generated column - SHA hash of content
     added_document_chunks = db.Column(db.Boolean, nullable=True)  # New field
@@ -474,6 +475,7 @@ class ZaloReceivedMessage(db.Model):
             'thread_type': self.thread_type,
             'received_at': self.received_at.isoformat() if self.received_at else None,
             'status_push_kafka': self.status_push_kafka,
+            'warehouse_id': self.warehouse_id,
             'reply_quote': self.reply_quote,
             'content_hash': self.content_hash,
             'added_document_chunks': self.added_document_chunks

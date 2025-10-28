@@ -154,13 +154,21 @@ def get_chunk_stats():
             )
         ).count()
         
+        # Thống kê tin nhắn đã push vào warehouse
+        warehouse_processed_messages = ZaloReceivedMessage.query.filter(
+            ZaloReceivedMessage.session_id == session_id,
+            ZaloReceivedMessage.warehouse_id.isnot(None)
+        ).count()
+        
         return jsonify({
             'session_id': session_id,
             'total_messages': total_messages,
             'processed_messages': processed_messages,
             'unprocessed_messages': unprocessed_messages,
+            'warehouse_processed_messages': warehouse_processed_messages,
             'total_chunks': total_chunks,
-            'processing_percentage': round((processed_messages / total_messages * 100) if total_messages > 0 else 0, 2)
+            'processing_percentage': round((processed_messages / total_messages * 100) if total_messages > 0 else 0, 2),
+            'warehouse_processing_percentage': round((warehouse_processed_messages / total_messages * 100) if total_messages > 0 else 0, 2)
         }), 200
         
     except Exception as e:
@@ -180,7 +188,8 @@ def get_zalo_sessions():
         sessions = db.session.query(
             ZaloReceivedMessage.session_id,
             db.func.count(ZaloReceivedMessage.id).label('total_messages'),
-            db.func.count(db.case([(ZaloReceivedMessage.added_document_chunks == True, 1)])).label('processed_messages')
+            db.func.count(db.case([(ZaloReceivedMessage.added_document_chunks == True, 1)])).label('processed_messages'),
+            db.func.count(db.case([(ZaloReceivedMessage.warehouse_id.isnot(None), 1)])).label('warehouse_processed_messages')
         ).group_by(ZaloReceivedMessage.session_id).all()
         
         session_list = []
@@ -190,7 +199,9 @@ def get_zalo_sessions():
                 'total_messages': session.total_messages,
                 'processed_messages': session.processed_messages,
                 'unprocessed_messages': session.total_messages - session.processed_messages,
-                'processing_percentage': round((session.processed_messages / session.total_messages * 100) if session.total_messages > 0 else 0, 2)
+                'warehouse_processed_messages': session.warehouse_processed_messages,
+                'processing_percentage': round((session.processed_messages / session.total_messages * 100) if session.total_messages > 0 else 0, 2),
+                'warehouse_processing_percentage': round((session.warehouse_processed_messages / session.total_messages * 100) if session.total_messages > 0 else 0, 2)
             })
         
         return jsonify({

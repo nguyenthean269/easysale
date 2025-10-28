@@ -16,6 +16,7 @@ from dotenv import load_dotenv
 from flask import Flask
 from flask_sqlalchemy import SQLAlchemy
 from utils.property_service_sql import PropertyService
+from .warehouse_database_service import warehouse_service
 
 # Load environment variables
 load_dotenv(dotenv_path=os.path.join(os.path.dirname(__file__), '..', '.env'))
@@ -30,24 +31,20 @@ logger.info(f"DB_CHAT_HOST: {os.getenv('DB_CHAT_HOST', 'NOT_SET')}")
 logger.info(f"DB_CHAT_PORT: {os.getenv('DB_CHAT_PORT', 'NOT_SET')}")
 logger.info(f"DB_CHAT_USER: {os.getenv('DB_CHAT_USER', 'NOT_SET')}")
 logger.info(f"DB_CHAT_PASSWORD: {'SET' if os.getenv('DB_CHAT_PASSWORD') else 'NOT_SET'}")
-logger.info(f"DB_CHAT_NAME: {os.getenv('DB_CHAT_NAME', 'NOT_SET')}")
+logger.info(f"DB_NAME: {os.getenv('DB_NAME', 'NOT_SET')}")
 logger.info(f"DB_WAREHOUSE_HOST: {os.getenv('DB_WAREHOUSE_HOST', 'NOT_SET')}")
 logger.info(f"DB_WAREHOUSE_PORT: {os.getenv('DB_WAREHOUSE_PORT', 'NOT_SET')}")
 logger.info(f"DB_WAREHOUSE_USER: {os.getenv('DB_WAREHOUSE_USER', 'NOT_SET')}")
 logger.info(f"DB_WAREHOUSE_PASSWORD: {'SET' if os.getenv('DB_WAREHOUSE_PASSWORD') else 'NOT_SET'}")
 logger.info(f"DB_WAREHOUSE_NAME: {os.getenv('DB_WAREHOUSE_NAME', 'NOT_SET')}")
 
-# Tạo Flask app cho zalo_messages database
+# Tạo Flask app cho easychat database
 zalo_app = Flask(__name__)
-zalo_app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql://{os.getenv('DB_CHAT_USER', 'easychat')}:{os.getenv('DB_CHAT_PASSWORD', '')}@{os.getenv('DB_CHAT_HOST', '103.6.234.59')}:{os.getenv('DB_CHAT_PORT', '6033')}/{os.getenv('DB_CHAT_NAME', 'zalo_messages')}"
+zalo_app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql://{os.getenv('DB_CHAT_USER', 'easychat')}:{os.getenv('DB_CHAT_PASSWORD', '')}@{os.getenv('DB_CHAT_HOST', '103.6.234.59')}:{os.getenv('DB_CHAT_PORT', '6033')}/{os.getenv('DB_NAME', 'easychat')}"
 zalo_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 zalo_db = SQLAlchemy(zalo_app)
 
-# Tạo Flask app cho warehouse database
-warehouse_app = Flask(__name__)
-warehouse_app.config['SQLALCHEMY_DATABASE_URI'] = f"mysql://{os.getenv('DB_WAREHOUSE_USER', 'root')}:{os.getenv('DB_WAREHOUSE_PASSWORD', '')}@{os.getenv('DB_WAREHOUSE_HOST', '103.6.234.59')}:{os.getenv('DB_WAREHOUSE_PORT', '6033')}/{os.getenv('DB_WAREHOUSE_NAME', 'warehouse')}"
-warehouse_app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-warehouse_db = SQLAlchemy(warehouse_app)
+# Warehouse database service được import từ warehouse_database_service.py
 
 class ZaloMessageProcessor:
     """Service xử lý tin nhắn Zalo định kỳ"""
@@ -66,41 +63,28 @@ class ZaloMessageProcessor:
         self.interval = schedule_minutes * 60  # Chuyển từ phút sang giây
         self.schedule_enabled = schedule_minutes > 0  # Chỉ enable nếu > 0
         
-        # Unit type mapping từ name sang id
-        self.unit_type_mapping = {
-            'Đơn lập': 1,
-            'Song lập': 2,
-            'Tứ lập': 3,
-            'Tứ lập cạnh góc': 4,
-            'Shophouse': 5,
-            'Studio': 6,
-            '1PN': 7,
-            '1PN+': 8,
-            '2PN1WC': 9,
-            '2PN2WC': 10,
-            '3PN': 11,
-            'Đơn lập cạnh góc': 12
-        }
+        # Warehouse service instance
+        self.warehouse_service = warehouse_service
         
         logger.info(f"ZaloMessageProcessor initialized (schedule: {self.interval//60} minutes, enabled: {self.schedule_enabled})")
     
     def get_zalo_db_connection(self):
-        """Tạo kết nối database zalo_messages với retry mechanism"""
+        """Tạo kết nối database easychat với retry mechanism"""
         max_retries = 3
         retry_delay = 1
         
         for attempt in range(max_retries):
             try:
-                logger.info(f"Attempting to connect to zalo_messages database... (attempt {attempt + 1}/{max_retries})")
+                logger.info(f"Attempting to connect to easychat database... (attempt {attempt + 1}/{max_retries})")
                 
                 with zalo_app.app_context():
                     # Sử dụng SQLAlchemy engine với connection pooling
                     connection = zalo_db.engine.connect()
-                    logger.info("✅ Zalo database connection successful")
+                    logger.info("✅ Easychat database connection successful")
                     return connection
                     
             except Exception as e:
-                logger.error(f"❌ Zalo database connection error (attempt {attempt + 1}): {e}")
+                logger.error(f"❌ Easychat database connection error (attempt {attempt + 1}): {e}")
                 logger.error(f"Error type: {type(e)}")
                 
                 if attempt < max_retries - 1:
@@ -108,47 +92,24 @@ class ZaloMessageProcessor:
                     time.sleep(retry_delay)
                     retry_delay *= 2  # Exponential backoff
                 else:
-                    logger.error("❌ Failed to connect to zalo database after all retries")
+                    logger.error("❌ Failed to connect to easychat database after all retries")
         
         return None
     
     def get_warehouse_db_connection(self):
         """Tạo kết nối database warehouse với retry mechanism"""
-        max_retries = 3
-        retry_delay = 1
-        
-        for attempt in range(max_retries):
-            try:
-                logger.info(f"Attempting to connect to warehouse database... (attempt {attempt + 1}/{max_retries})")
-                
-                with warehouse_app.app_context():
-                    # Sử dụng SQLAlchemy engine
-                    connection = warehouse_db.engine.connect()
-                    logger.info("✅ Warehouse database connection successful")
-                    return connection
-                    
-            except Exception as e:
-                logger.error(f"❌ Warehouse database connection error (attempt {attempt + 1}): {e}")
-                logger.error(f"Error type: {type(e)}")
-                
-                if attempt < max_retries - 1:
-                    logger.info(f"Retrying in {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
-                else:
-                    logger.error("❌ Failed to connect to warehouse database after all retries")
-        
-        return None
+        return self.warehouse_service.get_warehouse_db_connection()
     
-    def get_unprocessed_messages(self, limit: int = 20) -> List[Dict]:
+    def get_unprocessed_messages(self, limit: int = 20, warehouse_id: str = 'NULL') -> List[Dict]:
         """
-        Lấy danh sách tin nhắn chưa xử lý từ bảng received_messages
+        Lấy danh sách tin nhắn từ bảng zalo_received_messages trong database easychat theo warehouse_id
         
         Args:
             limit: Số lượng tin nhắn tối đa cần lấy
+            warehouse_id: Trạng thái warehouse_id ('NULL', 'NOT_NULL', 'ALL')
             
         Returns:
-            List các tin nhắn chưa xử lý
+            List các tin nhắn theo warehouse_id
         """
         try:
             logger.info("🔍 Starting to fetch unprocessed messages...")
@@ -169,20 +130,37 @@ class ZaloMessageProcessor:
                         logger.info("📊 Executing query to fetch messages...")
                         from sqlalchemy import text
                         
-                        query = text("""
+                        # Xây dựng WHERE clause dựa trên warehouse_id
+                        if warehouse_id == 'ALL':
+                            where_clause = ""
+                            params = {"limit": limit}
+                        elif warehouse_id == 'NULL':
+                            where_clause = "WHERE warehouse_id IS NULL"
+                            params = {"limit": limit}
+                        elif warehouse_id == 'NOT_NULL':
+                            where_clause = "WHERE warehouse_id IS NOT NULL"
+                            params = {"limit": limit}
+                        else:
+                            # Nếu warehouse_id là một số cụ thể
+                            where_clause = "WHERE warehouse_id = :warehouse_id"
+                            params = {"limit": limit, "warehouse_id": warehouse_id}
+                        
+                        query = text(f"""
                         SELECT id, session_id, config_id, sender_id, sender_name, 
                                content, thread_id, thread_type, received_at, 
-                               status_push_kafka, status_push_warehouse, reply_quote
-                        FROM received_messages 
-                        WHERE status_push_warehouse = 'NOT_YET' 
+                               status_push_kafka, warehouse_id, reply_quote,
+                               content_hash, added_document_chunks
+                        FROM zalo_received_messages 
+                        {where_clause}
                         ORDER BY received_at ASC 
                         LIMIT :limit
                         """)
                         
                         logger.info(f"🔍 Query: {query}")
                         logger.info(f"🔍 Limit: {limit}")
+                        logger.info(f"🔍 Warehouse ID filter: {warehouse_id}")
                         
-                        result = connection.execute(query, {"limit": limit})
+                        result = connection.execute(query, params)
                         logger.info("✅ Query executed successfully")
                         
                         messages = []
@@ -217,31 +195,7 @@ class ZaloMessageProcessor:
         Returns:
             str: Property tree đã format cho prompt
         """
-        try:
-            # Lấy property tree từ database (đã bao gồm unit types)
-            # Sử dụng raw SQL để tránh vấn đề với app context
-            import pymysql
-            
-            # Tạo connection đến warehouse database
-            connection = pymysql.connect(
-                host=os.getenv('DB_WAREHOUSE_HOST', '103.6.234.59'),
-                port=int(os.getenv('DB_WAREHOUSE_PORT', '6033')),
-                user=os.getenv('DB_WAREHOUSE_USER', 'root'),
-                password=os.getenv('DB_WAREHOUSE_PASSWORD', ''),
-                database=os.getenv('DB_WAREHOUSE_NAME', 'warehouse'),
-                charset='utf8mb4'
-            )
-            
-            property_tree = PropertyService.get_property_tree_for_prompt_with_sql(root_id, connection)
-            connection.close()
-
-
-            return property_tree
-            
-        except Exception as e:
-            logger.error(f"Lỗi khi lấy property tree: {str(e)}")
-            # Fallback về hardcoded data nếu có lỗi
-            return """Không có thông tin dự án"""
+        return self.warehouse_service.get_property_tree_for_prompt(root_id)
     
     def process_message_with_groq(self, message_content: str) -> Optional[str]:
         """
@@ -371,6 +325,7 @@ class ZaloMessageProcessor:
             - Không diễn giải, chỉ trả về JSON.
             - Nếu người dùng đề cập diện tích mà không nói là loại diện tích gì thì đó chính là diện tích tim tường.
             - Nếu người dùng đề cập hướng mà không nói là hướng cửa chính hay hướng ban công thì đó chính là hướng cửa chính.
+            - Nếu bài đăng có giá tiền triệu thì đó là giá thuê, giá tiền tỷ thì đó là giá bán.
             - Nếu không tìm thấy thông tin nào, trả về null cho trường đó.
             
             
@@ -522,28 +477,7 @@ class ZaloMessageProcessor:
         Returns:
             ID tương ứng hoặc None nếu không tìm thấy
         """
-        if not unit_type_name:
-            return None
-        
-        # Nếu đã là int thì return luôn
-        if isinstance(unit_type_name, int):
-            return unit_type_name
-            
-        # Convert to string nếu cần
-        unit_type_str = str(unit_type_name)
-            
-        # Tìm exact match trước
-        if unit_type_str in self.unit_type_mapping:
-            return self.unit_type_mapping[unit_type_str]
-        
-        # Tìm partial match
-        for name, id_val in self.unit_type_mapping.items():
-            if unit_type_str.lower() in name.lower() or name.lower() in unit_type_str.lower():
-                logger.info(f"Mapped '{unit_type_name}' to '{name}' (ID: {id_val})")
-                return id_val
-        
-        logger.warning(f"Unit type '{unit_type_name}' not found in mapping")
-        return None
+        return self.warehouse_service.map_unit_type_to_id(unit_type_name)
     
     def insert_apartment_via_api(self, apartment_data: Dict) -> bool:
         """
@@ -555,193 +489,15 @@ class ZaloMessageProcessor:
         Returns:
             True nếu thành công, False nếu lỗi
         """
-        try:
-            import requests
-            
-            # Map unit_type name sang ID
-            unit_type_id = None
-            if apartment_data.get('unit_type'):
-                unit_type_id = self.map_unit_type_to_id(apartment_data['unit_type'])
-            
-            # Chuẩn bị dữ liệu để gửi tới API
-            logger.info(f"🔍 Original apartment_data: {apartment_data}")
-            logger.info(f"🔍 unit_type_id mapped: {unit_type_id}")
-            
-            apartment_record = {
-                'property_group': apartment_data.get('property_group', 1),  # Default to 1
-                'unit_type': unit_type_id,
-                'unit_code': apartment_data.get('unit_code'),
-                'unit_axis': apartment_data.get('unit_axis'),
-                'unit_floor_number': apartment_data.get('unit_floor_number'),
-                'area_land': apartment_data.get('area_land'),
-                'area_construction': apartment_data.get('area_construction'),
-                'area_net': apartment_data.get('area_net'),
-                'area_gross': apartment_data.get('area_gross'),
-                'num_bedrooms': apartment_data.get('num_bedrooms'),
-                'num_bathrooms': apartment_data.get('num_bathrooms'),
-                'type_view': apartment_data.get('type_view'),
-                'direction_door': apartment_data.get('direction_door'),
-                'direction_balcony': apartment_data.get('direction_balcony'),
-                'price': apartment_data.get('price'),
-                'price_early': apartment_data.get('price_early'),
-                'price_schedule': apartment_data.get('price_schedule'),
-                'price_loan': apartment_data.get('price_loan'),
-                'notes': apartment_data.get('notes'),
-                'status': apartment_data.get('status'),
-                'unit_allocation': 'QUY_CHEO'  # Luôn set mặc định
-            }
-            
-            logger.info(f"🔍 Prepared apartment_record: {apartment_record}")
-            
-            # Gọi API warehouse để insert
-            api_url = f"http://localhost:5000/warehouse/api/warehouse/apartments/single-insert"
-            
-            response = requests.post(api_url, json=apartment_record, timeout=30)
-            
-            if response.status_code == 200:
-                result = response.json()
-                if result.get('success'):
-                    logger.info(f"✅ Successfully inserted apartment via API: {apartment_record.get('unit_code', 'N/A')}")
-                    return True
-                else:
-                    logger.error(f"❌ API returned error: {result.get('error')}")
-                    return False
-            else:
-                logger.error(f"❌ API request failed with status {response.status_code}: {response.text}")
-                return False
-                
-        except Exception as e:
-            logger.error(f"❌ Error calling warehouse API: {str(e)}")
-            logger.error(f"❌ Error type: {type(e)}")
-            logger.error(f"❌ Error details: {e}")
-            import traceback
-            logger.error(f"❌ Full traceback: {traceback.format_exc()}")
-            return False
-        """
-        Insert hoặc update apartment vào warehouse database
-        
-        Args:
-            apartment_data: Dữ liệu căn hộ từ Groq
-            
-        Returns:
-            True nếu thành công, False nếu lỗi
-        """
-        try:
-            with warehouse_app.app_context():
-                connection = self.get_warehouse_db_connection()
-                if not connection:
-                    return False
-                
-                from sqlalchemy import text
-                # Map unit_type name sang ID
-                unit_type_id = None
-                if apartment_data.get('unit_type'):
-                    unit_type_id = self.map_unit_type_to_id(apartment_data['unit_type'])
-                
-                # Chuẩn bị dữ liệu với hardcode values
-                apartment_record = {
-                    'property_group': 1,  # Hardcode
-                    'unit_type': unit_type_id,
-                    'unit_code': apartment_data.get('unit_code'),
-                    'unit_axis': apartment_data.get('unit_axis'),
-                    'unit_floor_number': apartment_data.get('unit_floor_number'),
-                    'area_land': apartment_data.get('area_land'),
-                    'area_construction': apartment_data.get('area_construction'),
-                    'area_net': apartment_data.get('area_net'),
-                    'area_gross': apartment_data.get('area_gross'),
-                    'num_bedrooms': apartment_data.get('num_bedrooms'),
-                    'num_bathrooms': apartment_data.get('num_bathrooms'),
-                    'type_view': None,  # Hardcode
-                    'direction_door': apartment_data.get('direction_door'),
-                    'direction_balcony': apartment_data.get('direction_balcony'),
-                    'price': apartment_data.get('price'),
-                    'price_early': apartment_data.get('price_early'),
-                    'price_schedule': apartment_data.get('price_schedule'),
-                    'price_loan': apartment_data.get('price_loan'),
-                    'notes': apartment_data.get('notes'),
-                    'status': apartment_data.get('status'),
-                    'unit_allocation': 'QUY_CHEO'  # Hardcode
-                }
-                
-                # Kiểm tra xem có căn hộ nào với unit_code này chưa
-                if apartment_record['unit_code']:
-                    check_query = text("SELECT id FROM apartments WHERE unit_code = :unit_code")
-                    result = connection.execute(check_query, {"unit_code": apartment_record['unit_code']})
-                    existing = result.fetchone()
-                    
-                    if existing:
-                        # Update existing record
-                        update_fields = []
-                        update_values = {}
-                        
-                        for field, value in apartment_record.items():
-                            if value is not None and field != 'property_group':  # Không update property_group
-                                update_fields.append(f"{field} = :{field}")
-                                update_values[field] = value
-                        
-                        if update_fields:
-                            update_values['id'] = existing[0]  # Add ID for WHERE clause
-                            update_query = text(f"""
-                                UPDATE apartments 
-                                SET {', '.join(update_fields)}
-                                WHERE id = :id
-                            """)
-                            connection.execute(update_query, update_values)
-                            logger.info(f"Updated apartment with unit_code: {apartment_record['unit_code']}")
-                    else:
-                        # Insert new record
-                        insert_fields = []
-                        insert_values = {}
-                        
-                        for field, value in apartment_record.items():
-                            if value is not None:
-                                insert_fields.append(field)
-                                insert_values[field] = value
-                        
-                        if insert_fields:
-                            placeholders = [f":{field}" for field in insert_fields]
-                            insert_query = text(f"""
-                                INSERT INTO apartments ({', '.join(insert_fields)})
-                                VALUES ({', '.join(placeholders)})
-                            """)
-                            connection.execute(insert_query, insert_values)
-                            logger.info(f"Inserted new apartment with unit_code: {apartment_record['unit_code']}")
-                else:
-                    # Không có unit_code, insert mới
-                    insert_fields = []
-                    insert_values = {}
-                    
-                    for field, value in apartment_record.items():
-                        if value is not None:
-                            insert_fields.append(field)
-                            insert_values[field] = value
-                    
-                    if insert_fields:
-                        placeholders = [f":{field}" for field in insert_fields]
-                        insert_query = text(f"""
-                            INSERT INTO apartments ({', '.join(insert_fields)})
-                            VALUES ({', '.join(placeholders)})
-                        """)
-                        connection.execute(insert_query, insert_values)
-                        logger.info("Inserted new apartment without unit_code")
-                
-                connection.commit()
-                return True
-                
-        except Exception as e:
-            logger.error(f"Error inserting/updating apartment: {e}")
-            return False
-        finally:
-            if connection:
-                connection.close()
+        return self.warehouse_service.insert_apartment_via_api(apartment_data)
     
-    def update_message_status(self, message_id: int, status: str = 'PUSHED') -> bool:
+    def update_message_warehouse_id(self, message_id: int, warehouse_id: int) -> bool:
         """
-        Cập nhật trạng thái tin nhắn sau khi xử lý với retry mechanism
+        Cập nhật warehouse_id của tin nhắn sau khi xử lý với retry mechanism
         
         Args:
             message_id: ID của tin nhắn
-            status: Trạng thái mới ('PUSHED' hoặc 'NOT_YET')
+            warehouse_id: ID của apartment trong warehouse database
             
         Returns:
             True nếu cập nhật thành công, False nếu lỗi
@@ -752,7 +508,7 @@ class ZaloMessageProcessor:
         for attempt in range(max_retries):
             connection = None
             try:
-                logger.info(f"Updating message {message_id} status to {status} (attempt {attempt + 1}/{max_retries})")
+                logger.info(f"Updating message {message_id} warehouse_id to {warehouse_id} (attempt {attempt + 1}/{max_retries})")
                 
                 with zalo_app.app_context():
                     connection = self.get_zalo_db_connection()
@@ -762,19 +518,19 @@ class ZaloMessageProcessor:
                 
                 from sqlalchemy import text
                 query = text("""
-                UPDATE received_messages 
-                SET status_push_warehouse = :status 
+                UPDATE zalo_received_messages 
+                SET warehouse_id = :warehouse_id 
                 WHERE id = :message_id
                 """)
                 
-                connection.execute(query, {"status": status, "message_id": message_id})
+                connection.execute(query, {"warehouse_id": warehouse_id, "message_id": message_id})
                 connection.commit()
                 
-                logger.info(f"✅ Updated message {message_id} status to {status}")
+                logger.info(f"✅ Updated message {message_id} warehouse_id to {warehouse_id}")
                 return True
                 
             except Exception as e:
-                logger.error(f"❌ Error updating message status (attempt {attempt + 1}): {e}")
+                logger.error(f"❌ Error updating message warehouse_id (attempt {attempt + 1}): {e}")
                 logger.error(f"Error type: {type(e)}")
                 
                 if attempt < max_retries - 1:
@@ -782,7 +538,7 @@ class ZaloMessageProcessor:
                     time.sleep(retry_delay)
                     retry_delay *= 2  # Exponential backoff
                 else:
-                    logger.error("❌ Failed to update message status after all retries")
+                    logger.error("❌ Failed to update message warehouse_id after all retries")
                 return False
                     
             finally:
@@ -829,13 +585,13 @@ class ZaloMessageProcessor:
                         warehouse_success = self.insert_apartment_via_api(apartment_data)
                         
                         if warehouse_success:
-                            # Chỉ cập nhật trạng thái tin nhắn sau khi xử lý warehouse thành công
-                            if self.update_message_status(message_id, 'PUSHED'):
+                            # Chỉ cập nhật warehouse_id của tin nhắn sau khi xử lý warehouse thành công
+                            if self.update_message_warehouse_id(message_id, warehouse_success):
                                 processed_count += 1
-                                logger.info(f"Successfully processed message {message_id}")
+                                logger.info(f"Successfully processed message {message_id} with warehouse_id {warehouse_success}")
                             else:
                                 error_count += 1
-                                logger.error(f"Failed to update message {message_id} status")
+                                logger.error(f"Failed to update message {message_id} warehouse_id")
                         else:
                             error_count += 1
                             logger.error(f"Failed to insert/update apartment for message {message_id}")
@@ -890,8 +646,9 @@ class ZaloMessageProcessor:
                 query = text("""
                 SELECT id, session_id, config_id, sender_id, sender_name, 
                        content, thread_id, thread_type, received_at, 
-                       status_push_kafka, status_push_warehouse, reply_quote
-                FROM received_messages 
+                       status_push_kafka, warehouse_id, reply_quote,
+                       content_hash, added_document_chunks
+                FROM zalo_received_messages 
                 WHERE id = :message_id
                 """)
                 
@@ -913,14 +670,16 @@ class ZaloMessageProcessor:
             if connection:
                 connection.close()
     
-    def run_test_one_mode(self, message_id: int):
+    def run_test_one_mode(self, message_id: int, real_insert: bool = False):
         """
         Chế độ test one - test một tin nhắn cụ thể theo ID
         
         Args:
             message_id: ID của tin nhắn cần test
+            real_insert: Nếu True, sẽ thực sự insert vào warehouse và cập nhật warehouse_id
         """
-        logger.info(f"🧪 Running in TEST-ONE mode - processing message ID: {message_id}")
+        mode_text = "REAL INSERT" if real_insert else "TEST MODE"
+        logger.info(f"🧪 Running in TEST-ONE mode ({mode_text}) - processing message ID: {message_id}")
         
         start_time = time.time()
         
@@ -933,7 +692,13 @@ class ZaloMessageProcessor:
                 return None, "Message not found"
             
             content = message['content']
+            current_warehouse_id = message.get('warehouse_id')
+            
             logger.info(f"📝 Message content: {content}")
+            if current_warehouse_id:
+                logger.info(f"🔄 Message already has warehouse_id: {current_warehouse_id} - will replace")
+            else:
+                logger.info(f"🆕 Message has no warehouse_id - will create new")
             
             # Gửi tới Groq để bóc tách thông tin
             logger.info("🤖 Processing with Groq...")
@@ -949,18 +714,43 @@ class ZaloMessageProcessor:
                 if apartment_data:
                     logger.info(f"📊 Parsed apartment data: {apartment_data}")
                     
-                    # Test insert/update vào warehouse database (không commit thật)
-                    logger.info("🏠 Testing warehouse insert/update...")
-                    warehouse_success = self.insert_apartment_via_api(apartment_data)
+                    # Insert/update vào warehouse database
+                    if current_warehouse_id:
+                        logger.info(f"🔄 Replacing existing apartment (ID: {current_warehouse_id})...")
+                    else:
+                        logger.info("🏠 Creating new apartment...")
                     
-                    if warehouse_success:
+                    warehouse_result = self.insert_apartment_via_api(apartment_data)
+                    
+                    if warehouse_result:
                         logger.info("✅ Warehouse insert/update successful")
+                        
+                        # Chỉ cập nhật warehouse_id khi real_insert=True
+                        if real_insert and isinstance(warehouse_result, int):
+                            if current_warehouse_id:
+                                logger.info(f"🔄 Replacing warehouse_id from {current_warehouse_id} to {warehouse_result} for message {message_id}")
+                            else:
+                                logger.info(f"🆕 Setting warehouse_id {warehouse_result} for message {message_id}")
+                            
+                            update_success = self.update_message_warehouse_id(message_id, warehouse_result)
+                            
+                            if update_success:
+                                logger.info(f"✅ Successfully updated warehouse_id for message {message_id}")
+                            else:
+                                logger.error(f"❌ Failed to update warehouse_id for message {message_id}")
+                        elif not real_insert:
+                            logger.info("ℹ️  Test mode - warehouse_id not updated to database")
+                        
                         result = {
                             'message_id': message_id,
                             'message_content': content,
                             'groq_result': groq_result,
                             'parsed_data': apartment_data,
-                            'warehouse_success': True
+                            'warehouse_success': True,
+                            'apartment_id': warehouse_result if isinstance(warehouse_result, int) else None,
+                            'real_insert': real_insert,
+                            'replaced': current_warehouse_id is not None,
+                            'previous_warehouse_id': current_warehouse_id
                         }
                     else:
                         logger.error("❌ Warehouse insert/update failed")
@@ -1090,12 +880,19 @@ class ZaloMessageProcessor:
             logger.warning("Service is not running")
             return
         
+        logger.info("🛑 Stopping ZaloMessageProcessor service...")
         self.is_running = False
         
         if self.thread and self.thread.is_alive():
-            self.thread.join(timeout=5)
+            logger.info("⏳ Waiting for thread to finish...")
+            self.thread.join(timeout=10)  # Tăng timeout lên 10 giây
+            
+            if self.thread.is_alive():
+                logger.warning("⚠️ Thread did not stop gracefully, forcing shutdown")
+            else:
+                logger.info("✅ Thread stopped gracefully")
         
-        logger.info("ZaloMessageProcessor service stopped")
+        logger.info("🛑 ZaloMessageProcessor service stopped")
     
     def get_status(self) -> Dict:
         """Lấy trạng thái service"""
