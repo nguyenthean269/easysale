@@ -141,3 +141,8 @@ if __name__ == "__main__":
     print("If you see 404 errors, make sure to restart the Flask app:")
     print("1. Stop the current app (Ctrl+C)")
     print("2. Run: python app.py")
+
+
+
+
+

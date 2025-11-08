@@ -94,4 +94,14 @@ export class ZaloTestService {
   batchProcessMessages(limit: number = 20): Observable<ZaloTestResponse & { data: BatchProcessResult }> {
     return this.http.post<ZaloTestResponse & { data: BatchProcessResult }>(`${this.apiUrl}/batch-process`, { limit });
   }
+
+  /**
+   * Xử lý nhiều messages cùng lúc với array message_ids
+   */
+  processMessagesBatch(messageIds: number[], realInsert: boolean = false): Observable<ZaloTestResponse> {
+    return this.http.post<ZaloTestResponse>(`${this.apiUrl}/process-message`, { 
+      message_ids: messageIds, 
+      real_insert: realInsert 
+    });
+  }
 }

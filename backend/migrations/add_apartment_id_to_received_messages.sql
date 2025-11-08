@@ -14,3 +14,8 @@ ADD INDEX idx_apartment_id (apartment_id);
 -- ADD CONSTRAINT fk_received_messages_apartment_id 
 -- FOREIGN KEY (apartment_id) REFERENCES warehouse.apartments(id) 
 -- ON DELETE SET NULL ON UPDATE CASCADE;
+
+
+
+
+

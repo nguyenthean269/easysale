@@ -108,3 +108,8 @@ Sau khi restart app, các API endpoints sẽ hoạt động:
 2. Kiểm tra firewall/network issues
 3. Kiểm tra frontend URL configuration
 4. Kiểm tra browser developer tools để xem actual requests
+
+
+
+
+

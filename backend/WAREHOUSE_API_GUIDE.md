@@ -274,3 +274,8 @@ curl -X POST http://localhost:5000/warehouse/api/warehouse/apartments/batch-inse
 4. **Scalable**: Có thể handle batch operations
 5. **Maintainable**: Dễ maintain và update validation rules
 6. **Testable**: Dễ test với các test cases khác nhau
+
+
+
+
+

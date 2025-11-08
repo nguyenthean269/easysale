@@ -125,3 +125,8 @@ def health_check():
 2. **Tune retry parameters** dựa trên thực tế
 3. **Add connection pooling metrics** để monitor performance
 4. **Implement circuit breaker pattern** nếu cần thiết
+
+
+
+
+

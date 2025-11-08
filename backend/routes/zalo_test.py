@@ -24,17 +24,35 @@ def test_process_message():
             }), 400
         
         message_id = data.get('message_id')
+        message_ids = data.get('message_ids')  # Array of message IDs
         message_content = data.get('message_content')
         real_insert = data.get('real_insert', False)  # Mặc định là False (test mode)
         
-        if not message_id and not message_content:
+        if not message_id and not message_ids and not message_content:
             return jsonify({
                 'success': False,
-                'error': 'Either message_id or message_content is required'
+                'error': 'Either message_id, message_ids array, or message_content is required'
             }), 400
         
+        # Nếu có message_ids array, xử lý nhiều messages cùng lúc
+        if message_ids:
+            logger.info(f"Testing batch message processing for IDs: {message_ids}, real_insert: {real_insert}")
+            result, error = zalo_processor.run_test_batch_mode(message_ids, real_insert=real_insert)
+            
+            if error:
+                return jsonify({
+                    'success': False,
+                    'error': error
+                }), 500
+            
+            return jsonify({
+                'success': True,
+                'data': result,
+                'message': f'Successfully processed {len(message_ids)} messages'
+            })
+        
         # Nếu có message_id, lấy tin nhắn từ database
-        if message_id:
+        elif message_id:
             logger.info(f"Testing message processing for ID: {message_id}, real_insert: {real_insert}")
             result, error = zalo_processor.run_test_one_mode(message_id, real_insert=real_insert)
             

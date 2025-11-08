@@ -327,8 +327,8 @@ class ZaloMessageProcessor:
             - Nếu người dùng đề cập hướng mà không nói là hướng cửa chính hay hướng ban công thì đó chính là hướng cửa chính.
             - Nếu bài đăng có giá tiền triệu thì đó là giá thuê, giá tiền tỷ thì đó là giá bán.
             - Nếu không tìm thấy thông tin nào, trả về null cho trường đó.
-            
-            
+            - Nếu bài đăng ghi tầng 1x thì đó là khoảng tầng 11 đến 19
+
             
             """
 
@@ -523,11 +523,17 @@ class ZaloMessageProcessor:
                 WHERE id = :message_id
                 """)
                 
-                connection.execute(query, {"warehouse_id": warehouse_id, "message_id": message_id})
+                result = connection.execute(query, {"warehouse_id": warehouse_id, "message_id": message_id})
                 connection.commit()
                 
-                logger.info(f"✅ Updated message {message_id} warehouse_id to {warehouse_id}")
-                return True
+                # Check if any rows were affected
+                rows_affected = result.rowcount
+                if rows_affected > 0:
+                    logger.info(f"✅ Updated message {message_id} warehouse_id to {warehouse_id} (rows affected: {rows_affected})")
+                    return True
+                else:
+                    logger.warning(f"⚠️ No rows affected when updating message {message_id} warehouse_id to {warehouse_id}")
+                    return False
                 
             except Exception as e:
                 logger.error(f"❌ Error updating message warehouse_id (attempt {attempt + 1}): {e}")
@@ -893,6 +899,289 @@ class ZaloMessageProcessor:
                 logger.info("✅ Thread stopped gracefully")
         
         logger.info("🛑 ZaloMessageProcessor service stopped")
+    
+    def run_test_batch_mode(self, message_ids: List[int], real_insert: bool = False):
+        """
+        Chế độ test batch - xử lý nhiều tin nhắn cùng lúc trong một prompt
+        
+        Args:
+            message_ids: List ID của các tin nhắn cần test
+            real_insert: Nếu True, sẽ thực sự insert vào warehouse và cập nhật warehouse_id
+            
+        Returns:
+            Tuple (result_dict, error_message)
+        """
+        logger.info(f"🧪 Running in BATCH TEST mode - processing {len(message_ids)} messages")
+        logger.info(f"📋 Message IDs: {message_ids}")
+        
+        start_time = time.time()
+        
+        try:
+            # Lấy tất cả messages theo IDs
+            messages = []
+            for message_id in message_ids:
+                message = self.get_message_by_id(message_id)
+                if message:
+                    messages.append(message)
+                else:
+                    logger.warning(f"❌ Message with ID {message_id} not found")
+            
+            if not messages:
+                return None, "No valid messages found"
+            
+            logger.info(f"✅ Found {len(messages)} valid messages out of {len(message_ids)} requested")
+            
+            # Tạo prompt cho nhiều messages
+            batch_content = self.create_batch_prompt(messages)
+            logger.info(f"📝 Batch prompt created with {len(messages)} messages")
+            
+            # Gửi tới Groq để bóc tách thông tin cho tất cả messages
+            logger.info("🤖 Processing batch with Groq...")
+            groq_result = self.process_message_with_groq(batch_content)
+            
+            if groq_result:
+                logger.info(f"✅ Groq batch result received")
+                
+                # Parse JSON từ Groq response (expecting array)
+                apartments_data = self.parse_groq_batch_response(groq_result)
+                
+                if apartments_data and len(apartments_data) > 0:
+                    logger.info(f"📊 Parsed {len(apartments_data)} apartment(s) from batch")
+                    
+                    # Insert/update vào warehouse database cho từng apartment
+                    results = []
+                    warehouse_ids = []
+                    
+                    # Tạo mapping từ message_id sang apartment_data (nếu có message_id trong apartment_data)
+                    apartment_by_message_id = {}
+                    for apartment_data in apartments_data:
+                        if 'message_id' in apartment_data and apartment_data['message_id']:
+                            apartment_by_message_id[apartment_data['message_id']] = apartment_data
+                    
+                    # Nếu không có message_id trong apartment_data, map theo index
+                    if not apartment_by_message_id:
+                        for i, apartment_data in enumerate(apartments_data):
+                            if i < len(messages):
+                                apartment_by_message_id[messages[i]['id']] = apartment_data
+                    
+                    # Tạo result cho TẤT CẢ messages, không chỉ apartments
+                    for message in messages:
+                        message_id = message['id']
+                        apartment_data = apartment_by_message_id.get(message_id)
+                        
+                        apartment_result = {
+                            'message_id': message_id,
+                            'apartment_data': apartment_data,
+                            'warehouse_success': False,
+                            'apartment_id': None,
+                            'real_insert': real_insert,
+                            'replaced': False,
+                            'previous_warehouse_id': None
+                        }
+                        
+                        if apartment_data:
+                            logger.info(f"🏠 Processing apartment for message {message_id}")
+                            
+                            # Insert vào warehouse database
+                            warehouse_result = self.insert_apartment_via_api(apartment_data)
+                            
+                            if warehouse_result:
+                                logger.info(f"✅ Warehouse insert/update successful for message {message_id}")
+                                apartment_result['warehouse_success'] = True
+                                apartment_result['apartment_id'] = warehouse_result if isinstance(warehouse_result, int) else None
+                                
+                                # Chỉ cập nhật warehouse_id khi real_insert=True
+                                if real_insert and isinstance(warehouse_result, int) and message_id:
+                                    logger.info(f"🔄 Attempting to update warehouse_id for message {message_id} to {warehouse_result}")
+                                    
+                                    # Kiểm tra xem message đã có warehouse_id chưa
+                                    current_message = self.get_message_by_id(message_id)
+                                    current_warehouse_id = current_message.get('warehouse_id') if current_message else None
+                                    
+                                    if current_warehouse_id:
+                                        logger.info(f"🔄 Replacing warehouse_id from {current_warehouse_id} to {warehouse_result} for message {message_id}")
+                                        apartment_result['replaced'] = True
+                                        apartment_result['previous_warehouse_id'] = current_warehouse_id
+                                    else:
+                                        logger.info(f"🆕 Setting warehouse_id {warehouse_result} for message {message_id}")
+                                    
+                                    update_success = self.update_message_warehouse_id(message_id, warehouse_result)
+                                    
+                                    if update_success:
+                                        logger.info(f"✅ Successfully updated warehouse_id for message {message_id}")
+                                        warehouse_ids.append(warehouse_result)
+                                    else:
+                                        logger.error(f"❌ Failed to update warehouse_id for message {message_id}")
+                                elif not real_insert:
+                                    logger.info("ℹ️  Test mode - warehouse_id not updated to database")
+                                else:
+                                    logger.warning(f"⚠️ Skipping warehouse_id update: real_insert={real_insert}, warehouse_result={warehouse_result}, message_id={message_id}")
+                            else:
+                                logger.error(f"❌ Warehouse insert/update failed for message {message_id}")
+                        else:
+                            logger.warning(f"⚠️ No apartment data found for message {message_id}")
+                        
+                        results.append(apartment_result)
+                    
+                    elapsed_time = time.time() - start_time
+                    
+                    result = {
+                        'batch_info': {
+                            'message_ids': message_ids,
+                            'processed_count': len(messages),
+                            'apartment_count': len(apartments_data),
+                            'successful_count': len([r for r in results if r['warehouse_success']]),
+                            'real_insert': real_insert,
+                            'processing_time': elapsed_time
+                        },
+                        'messages': messages,
+                        'apartments': apartments_data,
+                        'results': results,
+                        'warehouse_ids': warehouse_ids,
+                        'groq_result': groq_result
+                    }
+                    
+                    logger.info(f"✅ BATCH TEST mode completed in {elapsed_time:.2f}s")
+                    logger.info(f"📊 Results: {len(messages)} messages, {len(apartments_data)} apartments, {len(warehouse_ids)} warehouse_ids updated")
+                    
+                    return result, None
+                else:
+                    logger.error("❌ Failed to parse Groq batch response")
+                    return None, "Failed to parse Groq batch response"
+            else:
+                logger.error("❌ Failed to process batch with Groq")
+                return None, "Failed to process batch with Groq"
+                
+        except Exception as e:
+            logger.error(f"❌ Error in batch test mode: {e}")
+            return None, str(e)
+    
+    def create_batch_prompt(self, messages: List[Dict]) -> str:
+        """
+        Tạo prompt cho nhiều messages cùng lúc
+        
+        Args:
+            messages: List các message dictionaries
+            
+        Returns:
+            String prompt cho Groq
+        """
+        prompt_parts = [
+            "Tôi sẽ gửi cho bạn nhiều tin nhắn về bất động sản. Hãy phân tích từng tin nhắn và trả về thông tin căn hộ dưới dạng JSON array.",
+            "Mỗi tin nhắn sẽ có ID để bạn có thể track. Trả về một array JSON với các object căn hộ.",
+            "",
+            "Format trả về:",
+            "[",
+            "  {",
+            "    \"message_id\": 123,",
+            "    \"property_group_name\": \"Tên dự án\",",
+            "    \"unit_type_name\": \"Loại căn hộ\",",
+            "    \"unit_code\": \"Mã căn\",",
+            "    \"unit_floor_number\": \"Tầng\",",
+            "    \"area_gross\": \"Diện tích\",",
+            "    \"price\": \"Giá\",",
+            "    \"num_bedrooms\": \"Số phòng ngủ\",",
+            "    \"num_bathrooms\": \"Số phòng tắm\",",
+            "    \"direction_door\": \"Hướng cửa\",",
+            "    \"direction_balcony\": \"Hướng ban công\",",
+            "    \"notes\": \"Ghi chú\"",
+            "  },",
+            "  ...",
+            "]",
+            "",
+            "Quy tắc phân tích:",
+            "- Nếu không tìm thấy thông tin nào, trả về null cho trường đó.",
+            "- Nếu bài đăng có giá tiền triệu thì đó là giá thuê, giá tiền tỷ thì đó là giá bán.",
+            "- Nếu người dùng đề cập diện tích mà không nói là loại diện tích gì thì đó chính là diện tích tim tường.",
+            "- Nếu người dùng đề cập hướng mà không nói là hướng cửa chính hay hướng ban công thì đó chính là hướng cửa chính.",
+            "",
+            "Các tin nhắn cần phân tích:",
+            ""
+        ]
+        
+        for i, message in enumerate(messages):
+            prompt_parts.append(f"--- Tin nhắn {i+1} (ID: {message['id']}) ---")
+            prompt_parts.append(message['content'])
+            prompt_parts.append("")
+        
+        return "\n".join(prompt_parts)
+    
+    def parse_groq_batch_response(self, groq_response: str) -> List[Dict]:
+        """
+        Parse Groq response cho batch processing (expecting JSON array or single object)
+        
+        Args:
+            groq_response: Response từ Groq
+            
+        Returns:
+            List các apartment dictionaries
+        """
+        try:
+            response_clean = groq_response.strip()
+            
+            # Thử tìm JSON array trước [ { ... }, { ... } ]
+            array_start = response_clean.find('[')
+            if array_start != -1:
+                # Tìm closing bracket bằng cách đếm balanced brackets
+                bracket_count = 0
+                array_end = -1
+                for i in range(array_start, len(response_clean)):
+                    if response_clean[i] == '[':
+                        bracket_count += 1
+                    elif response_clean[i] == ']':
+                        bracket_count -= 1
+                        if bracket_count == 0:
+                            array_end = i
+                            break
+                
+                if array_end != -1:
+                    json_str = response_clean[array_start:array_end + 1]
+                    try:
+                        apartments = json.loads(json_str)
+                        if isinstance(apartments, list):
+                            logger.info(f"✅ Parsed {len(apartments)} apartments from batch response (array format)")
+                            return apartments
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Failed to parse as array: {e}")
+            
+            # Nếu không tìm thấy array, thử tìm single JSON object { ... }
+            object_start = response_clean.find('{')
+            if object_start != -1:
+                # Tìm closing brace bằng cách đếm balanced braces
+                brace_count = 0
+                object_end = -1
+                for i in range(object_start, len(response_clean)):
+                    if response_clean[i] == '{':
+                        brace_count += 1
+                    elif response_clean[i] == '}':
+                        brace_count -= 1
+                        if brace_count == 0:
+                            object_end = i
+                            break
+                
+                if object_end != -1:
+                    json_str = response_clean[object_start:object_end + 1]
+                    try:
+                        apartment = json.loads(json_str)
+                        if isinstance(apartment, dict):
+                            logger.info(f"✅ Parsed 1 apartment from batch response (single object format, wrapped in array)")
+                            return [apartment]  # Wrap single object in array
+                    except json.JSONDecodeError as e:
+                        logger.debug(f"Failed to parse as object: {e}")
+            
+            # Nếu cả hai đều không thành công, log lỗi chi tiết
+            logger.error("❌ No valid JSON array or object found in Groq response")
+            logger.error(f"Raw response preview: {response_clean[:500]}...")
+            return []
+                
+        except json.JSONDecodeError as e:
+            logger.error(f"❌ JSON decode error: {e}")
+            logger.error(f"Raw response: {groq_response}")
+            return []
+        except Exception as e:
+            logger.error(f"❌ Error parsing Groq batch response: {e}")
+            logger.error(f"Raw response preview: {groq_response[:500]}...")
+            return []
     
     def get_status(self) -> Dict:
         """Lấy trạng thái service"""
