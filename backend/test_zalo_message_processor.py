@@ -32,9 +32,11 @@ def test_get_unprocessed_messages():
     print("🔍 Testing get unprocessed messages...")
     
     processor = ZaloMessageProcessor()
-    messages = processor.get_unprocessed_messages(limit=5)
+    result = processor.get_unprocessed_messages(limit=5)
+    messages = result.get('messages', []) if isinstance(result, dict) else result
+    total = result.get('total', len(messages)) if isinstance(result, dict) else len(messages)
     
-    print(f"📊 Found {len(messages)} unprocessed messages")
+    print(f"📊 Found {len(messages)} unprocessed messages (total: {total})")
     
     if messages:
         print("📝 Sample message:")
@@ -137,7 +139,8 @@ def test_message_status_update():
     processor = ZaloMessageProcessor()
     
     # Lấy một tin nhắn để test
-    messages = processor.get_unprocessed_messages(limit=1)
+    result = processor.get_unprocessed_messages(limit=1)
+    messages = result.get('messages', []) if isinstance(result, dict) else result
     
     if not messages:
         print("⚠️  No messages available for testing")

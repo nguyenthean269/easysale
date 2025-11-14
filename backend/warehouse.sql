@@ -33,6 +33,7 @@ CREATE TABLE `apartments` (
   `price_rent` decimal(18,0) DEFAULT NULL COMMENT 'Giá thuê',
   `notes` text CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci,
   `status` enum('CHUA_BAN','DA_LOCK','DA_COC','DA_BAN') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT NULL COMMENT 'Trạng thái giao dịch của căn hộ: CHUA_BAN, DA_LOCK, DA_COC, DA_BAN',
+  `data_status` enum('REVIEWING','PENDING','APPROVED') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci DEFAULT 'PENDING' COMMENT 'Trạng thái dữ liệu: REVIEWING (đang xem xét), PENDING (chờ duyệt), APPROVED (đã duyệt)',
   `unit_allocation` set('QUY_DOC_QUYEN','QUY_AN','QUY_CHEO','QUY_THUONG') CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci NOT NULL COMMENT 'Loại quỹ căn: Quỹ độc quyền, Quỹ ẩn, Quỹ chéo, Quỹ thưởng',
   `images_marker` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin COMMENT 'Ảnh chỉ căn',
   `images_pricing_sheet` longtext CHARACTER SET utf8mb4 COLLATE utf8mb4_bin COMMENT 'Ảnh phiếu tính giá',

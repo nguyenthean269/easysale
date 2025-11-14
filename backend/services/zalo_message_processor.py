@@ -59,9 +59,13 @@ class ZaloMessageProcessor:
         self.thread = None
         
         # Lấy interval từ environment variable (đơn vị phút)
+        # ZALO_MESSAGE_PROCESSOR_SCHEDULE=0 nghĩa là tắt schedule mặc định
+        # Nhưng vẫn có thể start từ UI
         schedule_minutes = int(os.getenv('ZALO_MESSAGE_PROCESSOR_SCHEDULE', '10'))
-        self.interval = schedule_minutes * 60  # Chuyển từ phút sang giây
-        self.schedule_enabled = schedule_minutes > 0  # Chỉ enable nếu > 0
+        self.default_interval = schedule_minutes * 60  # Chuyển từ phút sang giây (giá trị mặc định)
+        self.interval = self.default_interval  # Interval hiện tại (có thể thay đổi từ UI)
+        self.schedule_enabled = schedule_minutes > 0  # Flag mặc định: 0 = tắt, >0 = bật
+        self.started_at = None  # Thời gian bắt đầu schedule
         
         # Warehouse service instance
         self.warehouse_service = warehouse_service
@@ -100,12 +104,13 @@ class ZaloMessageProcessor:
         """Tạo kết nối database warehouse với retry mechanism"""
         return self.warehouse_service.get_warehouse_db_connection()
     
-    def get_unprocessed_messages(self, limit: int = 20, warehouse_id: str = 'NULL') -> List[Dict]:
+    def get_unprocessed_messages(self, limit: int = 20, offset: int = 0, warehouse_id: str = 'NULL') -> List[Dict]:
         """
         Lấy danh sách tin nhắn từ bảng zalo_received_messages trong database easychat theo warehouse_id
         
         Args:
             limit: Số lượng tin nhắn tối đa cần lấy
+            offset: Số lượng tin nhắn bỏ qua (cho pagination)
             warehouse_id: Trạng thái warehouse_id ('NULL', 'NOT_NULL', 'ALL')
             
         Returns:
@@ -131,44 +136,69 @@ class ZaloMessageProcessor:
                         from sqlalchemy import text
                         
                         # Xây dựng WHERE clause dựa trên warehouse_id
+                        # Luôn thêm điều kiện content_hash IS NOT NULL để chỉ lấy messages unique
                         if warehouse_id == 'ALL':
-                            where_clause = ""
-                            params = {"limit": limit}
+                            where_clause = "WHERE content_hash IS NOT NULL"
+                            params = {"limit": limit, "offset": offset}
                         elif warehouse_id == 'NULL':
-                            where_clause = "WHERE warehouse_id IS NULL"
-                            params = {"limit": limit}
+                            where_clause = "WHERE warehouse_id IS NULL AND content_hash IS NOT NULL"
+                            params = {"limit": limit, "offset": offset}
                         elif warehouse_id == 'NOT_NULL':
-                            where_clause = "WHERE warehouse_id IS NOT NULL"
-                            params = {"limit": limit}
+                            where_clause = "WHERE warehouse_id IS NOT NULL AND content_hash IS NOT NULL"
+                            params = {"limit": limit, "offset": offset}
                         else:
                             # Nếu warehouse_id là một số cụ thể
-                            where_clause = "WHERE warehouse_id = :warehouse_id"
-                            params = {"limit": limit, "warehouse_id": warehouse_id}
+                            where_clause = "WHERE warehouse_id = :warehouse_id AND content_hash IS NOT NULL"
+                            params = {"limit": limit, "offset": offset, "warehouse_id": warehouse_id}
                         
-                        query = text(f"""
-                        SELECT id, session_id, config_id, sender_id, sender_name, 
-                               content, thread_id, thread_type, received_at, 
-                               status_push_kafka, warehouse_id, reply_quote,
-                               content_hash, added_document_chunks
+                        # Query để đếm tổng số records (unique content_hash)
+                        # Chỉ đếm các content_hash unique, không trùng lặp
+                        count_query = text(f"""
+                        SELECT COUNT(DISTINCT content_hash) as total
                         FROM zalo_received_messages 
                         {where_clause}
-                        ORDER BY received_at ASC 
-                        LIMIT :limit
                         """)
                         
-                        logger.info(f"🔍 Query: {query}")
-                        logger.info(f"🔍 Limit: {limit}")
+                        # Query để lấy data với pagination - chỉ lấy messages unique theo content_hash
+                        # Sử dụng subquery để lấy MIN(id) cho mỗi content_hash unique
+                        data_query = text(f"""
+                        SELECT z.id, z.session_id, z.config_id, z.sender_id, z.sender_name, 
+                               z.content, z.thread_id, z.thread_type, z.received_at, 
+                               z.status_push_kafka, z.warehouse_id, z.reply_quote,
+                               z.content_hash, z.added_document_chunks
+                        FROM zalo_received_messages z
+                        INNER JOIN (
+                            SELECT content_hash, MIN(id) as min_id
+                            FROM zalo_received_messages
+                            {where_clause}
+                            GROUP BY content_hash
+                            ORDER BY MIN(received_at) ASC
+                            LIMIT :limit OFFSET :offset
+                        ) unique_hashes ON z.content_hash = unique_hashes.content_hash AND z.id = unique_hashes.min_id
+                        ORDER BY z.received_at ASC
+                        """)
+                        
+                        logger.info(f"🔍 Data Query: {data_query}")
+                        logger.info(f"🔍 Limit: {limit}, Offset: {offset}")
                         logger.info(f"🔍 Warehouse ID filter: {warehouse_id}")
                         
-                        result = connection.execute(query, params)
+                        # Đếm tổng số records (unique content_hash)
+                        count_params = {k: v for k, v in params.items() if k != 'limit' and k != 'offset'}
+                        count_result = connection.execute(count_query, count_params)
+                        total_count = count_result.fetchone()[0]
+                        
+                        # Lấy data
+                        result = connection.execute(data_query, params)
                         logger.info("✅ Query executed successfully")
                         
                         messages = []
                         for row in result:
                             messages.append(dict(row._mapping))
                         
-                        logger.info(f"✅ Found {len(messages)} unprocessed messages")
-                        return messages
+                        logger.info(f"✅ Found {len(messages)} unprocessed messages out of {total_count} total")
+                        # Return messages with total count as metadata
+                        # We'll modify the return to include total in a dict
+                        return {'messages': messages, 'total': total_count}
                         
                 except Exception as e:
                     logger.error(f"❌ Attempt {attempt + 1} failed: {e}")
@@ -183,7 +213,7 @@ class ZaloMessageProcessor:
             logger.error(f"❌ Error type: {type(e)}")
             import traceback
             logger.error(f"❌ Traceback: {traceback.format_exc()}")
-            return []
+            return {'messages': [], 'total': 0}
     
     def get_property_tree_for_prompt(self, root_id: int = 1) -> str:
         """
@@ -224,96 +254,114 @@ class ZaloMessageProcessor:
             <output>
 {{
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "Thông tin căn hộ rao bán",
-  "type": "object",
-  "properties": {{
-    "property_group": {{
-      "type": "numer",
-      "description": "Người dùng đang có căn hộ rao bán tại tòa có ID là bao nhiêu?"
+  "title": "Danh sách căn hộ rao bán",
+  "type": "array",
+  "items": {{
+    "type": "object",
+    "title": "Thông tin căn hộ rao bán",
+    "properties": {{
+      "message_id": {{
+        "type": "number",
+        "description": "ID để phục vụ tracking"
+      }},
+      "property_group": {{
+        "type": "number",
+        "description": "Người dùng đang có căn hộ rao bán tại tòa có ID là bao nhiêu? Sử dụng thông tin trong cặp thẻ XML <thong-tin-du-an></thong-tin-du-an> để xác định."
+      }},
+      "unit_code": {{
+        "type": ["string", "null"],
+        "description": "Mã căn hộ nếu có. Mã căn hộ thường được ghép từ số tầng và số trục căn. Ví dụ: 0812, 08A15A"
+      }},
+      "unit_axis": {{
+        "type": ["string", "null"],
+        "description": "Trục căn nếu có. Ví dụ: 12, 15A"
+      }},
+      "unit_floor_number": {{
+        "type": ["integer", "null"],
+        "description": "Tầng nếu có. Ví dụ: 08, 08A"
+      }},
+      "area_land": {{
+        "type": ["number", "null"],
+        "description": "Diện tích đất nếu có"
+      }},
+      "area_construction": {{
+        "type": ["number", "null"],
+        "description": "Diện tích xây dựng nếu có"
+      }},
+      "area_net": {{
+        "type": ["number", "null"],
+        "description": "Diện tích thông thủy nếu có"
+      }},
+      "area_gross": {{
+        "type": ["number", "null"],
+        "description": "Diện tích tim tường nếu có"
+      }},
+      "num_bedrooms": {{
+        "type": ["integer", "null"],
+        "description": "Số phòng ngủ nếu có"
+      }},
+      "num_bathrooms": {{
+        "type": ["integer", "null"],
+        "description": "Số phòng tắm nếu có"
+      }},
+      "unit_type": {{
+        "type": "number",
+        "description": "ID của loại căn hộ"
+      }},
+      "direction_door": {{
+        "type": ["string", "null"],
+        "enum": ["D", "T", "N", "B", "DB", "DN", "TB", "TN", null],
+        "description": "Hướng cửa chính"
+      }},
+      "direction_balcony": {{
+        "type": ["string", "null"],
+        "enum": ["D", "T", "N", "B", "DB", "DN", "TB", "TN", null],
+        "description": "Hướng ban công"
+      }},
+      "price": {{
+        "type": "number",
+        "description": "Giá nếu có. Đơn vị VNĐ"
+      }},
+      "price_early": {{
+        "type": "number",
+        "description": "Giá thanh toán sớm nếu có. Đơn vị VNĐ"
+      }},
+      "price_schedule": {{
+        "type": "number",
+        "description": "Giá thanh toán theo tiến độ nếu có. Đơn vị VNĐ"
+      }},
+      "price_loan": {{
+        "type": "number",
+        "description": "Giá vay ngân hàng nếu có. Đơn vị VNĐ"
+      }},
+      "price_rent": {{
+        "type": "number",
+        "description": "Giá cho thuê nếu có. Đơn vị VNĐ"
+      }},
+      "phone_number": {{
+        "type": ["string", "null"],
+        "description": "Số điện thoại liên hệ"
+      }},
+      "listing_type": {{
+        "type": "string",
+        "enum": ["CAN_THUE", "CAN_CHO_THUE", "CAN_BAN", "CAN_MUA", "KHAC"],
+        "description": "Mục đích tin đăng: cần thuê, cần cho thuê, cần bán, cần mua, khác"
+      }},
+      "notes": {{
+        "type": ["string", "null"],
+        "description": "Ghi chú nếu có"
+      }},
+      "status": {{
+        "type": ["string", "null"],
+        "enum": ["CHUA_BAN", "DA_LOCK", "DA_COC", "DA_BAN", null],
+        "description": "Trạng thái nếu có"
+      }}
     }},
-    "unit_code": {{
-      "type": ["string", "null"],
-      "description": "Mã căn hộ nếu có"
-    }},
-    "unit_axis": {{
-      "type": ["string", "null"],
-      "description": "Trục căn nếu có"
-    }},
-    "unit_floor_number": {{
-      "type": ["integer", "null"],
-      "description": "Tầng nếu có"
-    }},
-    "area_land": {{
-      "type": ["number", "null"],
-      "description": "Diện tích đất nếu có"
-    }},
-    "area_construction": {{
-      "type": ["number", "null"],
-      "description": "Diện tích xây dựng nếu có"
-    }},
-    "area_net": {{
-      "type": ["number", "null"],
-      "description": "Diện tích thông thủy nếu có"
-    }},
-    "area_gross": {{
-      "type": ["number", "null"],
-      "description": "Diện tích tim tường nếu có"
-    }},
-    "num_bedrooms": {{
-      "type": ["integer", "null"],
-      "description": "Số phòng ngủ nếu có"
-    }},
-    "num_bathrooms": {{
-      "type": ["integer", "null"],
-      "description": "Số phòng tắm nếu có"
-    }},
-    "unit_type": {{
-      "type": "number",
-      "description": "ID của loại căn hộ"
-    }},
-    "direction_door": {{
-      "type": ["string", "null"],
-      "enum": ["D", "T", "N", "B", "DB", "DN", "TB", "TN", null],
-      "description": "Hướng cửa chính"
-    }},
-    "direction_balcony": {{
-      "type": ["string", "null"],
-      "enum": ["D", "T", "N", "B", "DB", "DN", "TB", "TN", null],
-      "description": "Hướng ban công"
-    }},
-    "price": {{
-      "type": "number",
-      "description": "Giá nếu có. Đơn vị VNĐ"
-    }},
-    "price_early": {{
-      "type": "number",
-      "description": "Giá thanh toán sớm nếu có. Đơn vị VNĐ"
-    }},
-    "price_schedule": {{
-      "type": "number",
-      "description": "Giá thanh toán theo tiến độ nếu có. Đơn vị VNĐ"
-    }},
-    "price_loan": {{
-      "type": "number",
-      "description": "Giá vay ngân hàng nếu có. Đơn vị VNĐ"
-    }},
-    "price_rent": {{
-      "type": "number",
-      "description": "Giá vay ngân hàng nếu có. Đơn vị VNĐ"
-    }},
-    "notes": {{
-      "type": ["string", "null"],
-      "description": "Ghi chú nếu có"
-    }},
-    "status": {{
-      "type": ["string", "null"],
-      "enum": ["CHUA_BAN", "DA_LOCK", "DA_COC", "DA_BAN", null],
-      "description": "Trạng thái nếu có"
-    }}
-  }},
-  "required": ["property_group"],
-  "additionalProperties": false
+    "required": ["property_group"],
+    "additionalProperties": false
+  }}
 }}
+
 </output>
 
 
@@ -328,6 +376,7 @@ class ZaloMessageProcessor:
             - Nếu bài đăng có giá tiền triệu thì đó là giá thuê, giá tiền tỷ thì đó là giá bán.
             - Nếu không tìm thấy thông tin nào, trả về null cho trường đó.
             - Nếu bài đăng ghi tầng 1x thì đó là khoảng tầng 11 đến 19
+            - Viết "TC 7tr5" nghĩa là tài chính 7 triệu 500 ngàn , ý là tài chính (ngân sách) 7.5 triệu
 
             
             """
@@ -345,41 +394,43 @@ class ZaloMessageProcessor:
                     }
                 ],
                 temperature=0.1,  # Giảm temperature để kết quả ổn định hơn với GPT-OSS
-                max_completion_tokens=2048,  # Tăng token limit cho GPT-OSS
+                max_completion_tokens=36751,  # Tăng token limit cho GPT-OSS
                 top_p=0.9,  # Giảm top_p để tập trung hơn
-                stream=True,
+                stream=False,
                 stop=None
             )
             
             # Collect streaming response với error handling tốt hơn
-            response_content = ""
-            try:
-                for chunk in completion:
-                    if hasattr(chunk, 'choices') and chunk.choices and len(chunk.choices) > 0:
-                        if hasattr(chunk.choices[0], 'delta') and chunk.choices[0].delta:
-                            if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
-                                response_content += chunk.choices[0].delta.content
-            except Exception as stream_error:
-                logger.error(f"Error in streaming response: {stream_error}")
-                # Fallback: thử lấy response không streaming
-                try:
-                    completion_no_stream = self.groq_client.chat.completions.create(
-                        model="openai/gpt-oss-120b",
-                        messages=[
-                            {
-                                "role": "user",
-                                "content": prompt
-                            }
-                        ],
-                        temperature=0.1,
-                        max_completion_tokens=2048,
-                        top_p=0.9,
-                        stream=False
-                    )
-                    response_content = completion_no_stream.choices[0].message.content
-                except Exception as fallback_error:
-                    logger.error(f"Fallback also failed: {fallback_error}")
-                    return None
+            response_content = completion.choices[0].message.content
+            # print('response_content2', completion.choices[0].message)
+            # try:
+            #     for chunk in completion:
+            #         if hasattr(chunk, 'choices') and chunk.choices and len(chunk.choices) > 0:
+            #             if hasattr(chunk.choices[0], 'delta') and chunk.choices[0].delta:
+            #                 if hasattr(chunk.choices[0].delta, 'content') and chunk.choices[0].delta.content:
+            #                     response_content += chunk.choices[0].delta.content
+            #     print('response_content', response_content)
+            # except Exception as stream_error:
+            #     logger.error(f"Error in streaming response: {stream_error}")
+            #     # Fallback: thử lấy response không streaming
+            #     try:
+            #         completion_no_stream = self.groq_client.chat.completions.create(
+            #             model="openai/gpt-oss-120b",
+            #             messages=[
+            #                 {
+            #                     "role": "user",
+            #                     "content": prompt
+            #                 }
+            #             ],
+            #             temperature=0.1,
+            #             max_completion_tokens=2048,
+            #             top_p=0.9,
+            #             stream=False
+            #         )
+            #         response_content = completion_no_stream.choices[0].message.content
+            #     except Exception as fallback_error:
+            #         logger.error(f"Fallback also failed: {fallback_error}")
+            #         return None
             
             logger.info(f"GPT-OSS processing completed for message, response length: {len(response_content)}")
             return response_content
@@ -494,6 +545,91 @@ class ZaloMessageProcessor:
     def update_message_warehouse_id(self, message_id: int, warehouse_id: int) -> bool:
         """
         Cập nhật warehouse_id của tin nhắn sau khi xử lý với retry mechanism
+        DEPRECATED: Sử dụng update_warehouse_id_by_content_hash() để update tất cả messages cùng content_hash
+        
+        Args:
+            message_id: ID của tin nhắn
+            warehouse_id: ID của apartment trong warehouse database
+            
+        Returns:
+            True nếu cập nhật thành công, False nếu lỗi
+        """
+        # Lấy content_hash từ message để update tất cả messages cùng content_hash
+        message = self.get_message_by_id(message_id)
+        if message and message.get('content_hash'):
+            return self.update_warehouse_id_by_content_hash(message['content_hash'], warehouse_id)
+        else:
+            # Fallback: update chỉ message này nếu không có content_hash
+            return self._update_single_message_warehouse_id(message_id, warehouse_id)
+    
+    def update_warehouse_id_by_content_hash(self, content_hash: str, warehouse_id: int) -> bool:
+        """
+        Cập nhật warehouse_id cho TẤT CẢ các messages có cùng content_hash
+        
+        Args:
+            content_hash: Hash của nội dung message
+            warehouse_id: ID của apartment trong warehouse database
+            
+        Returns:
+            True nếu cập nhật thành công, False nếu lỗi
+        """
+        max_retries = 3
+        retry_delay = 1
+        
+        for attempt in range(max_retries):
+            connection = None
+            try:
+                logger.info(f"Updating warehouse_id to {warehouse_id} for all messages with content_hash={content_hash} (attempt {attempt + 1}/{max_retries})")
+                
+                with zalo_app.app_context():
+                    connection = self.get_zalo_db_connection()
+                    if not connection:
+                        logger.error(f"No database connection available (attempt {attempt + 1})")
+                        continue
+                
+                from sqlalchemy import text
+                query = text("""
+                UPDATE zalo_received_messages 
+                SET warehouse_id = :warehouse_id 
+                WHERE content_hash = :content_hash
+                """)
+                
+                result = connection.execute(query, {"warehouse_id": warehouse_id, "content_hash": content_hash})
+                connection.commit()
+                
+                # Check if any rows were affected
+                rows_affected = result.rowcount
+                if rows_affected > 0:
+                    logger.info(f"✅ Updated {rows_affected} message(s) with content_hash={content_hash} to warehouse_id={warehouse_id}")
+                    return True
+                else:
+                    logger.warning(f"⚠️ No rows affected when updating messages with content_hash={content_hash}")
+                    return False
+                
+            except Exception as e:
+                logger.error(f"❌ Error updating warehouse_id by content_hash (attempt {attempt + 1}): {e}")
+                logger.error(f"Error type: {type(e)}")
+                
+                if attempt < max_retries - 1:
+                    logger.info(f"Retrying in {retry_delay} seconds...")
+                    time.sleep(retry_delay)
+                    retry_delay *= 2  # Exponential backoff
+                else:
+                    logger.error("❌ Failed to update warehouse_id by content_hash after all retries")
+                return False
+                    
+            finally:
+                if connection:
+                    try:
+                        connection.close()
+                    except Exception as close_error:
+                        logger.warning(f"Warning: Error closing connection: {close_error}")
+        
+        return False
+    
+    def _update_single_message_warehouse_id(self, message_id: int, warehouse_id: int) -> bool:
+        """
+        Cập nhật warehouse_id của một tin nhắn cụ thể (fallback method)
         
         Args:
             message_id: ID của tin nhắn
@@ -557,11 +693,17 @@ class ZaloMessageProcessor:
         return False
     
     def process_messages_batch(self, limit: int = 20):
-        """Xử lý một batch tin nhắn"""
+        """
+        Xử lý một batch tin nhắn (sử dụng batch processing giống như /api/zalo-test/process-message)
+        - Gộp nhiều messages vào 1 prompt, gửi 1 request Groq
+        - Set data_status='REVIEWING' cho tất cả apartments
+        - Cập nhật warehouse_id cho tất cả messages cùng content_hash
+        """
         logger.info(f"Starting message batch processing (limit: {limit})...")
         
         # Lấy tin nhắn chưa xử lý
-        messages = self.get_unprocessed_messages(limit=limit)
+        result = self.get_unprocessed_messages(limit=limit)
+        messages = result.get('messages', []) if isinstance(result, dict) else result
         
         if not messages:
             logger.info("No unprocessed messages found")
@@ -570,47 +712,82 @@ class ZaloMessageProcessor:
         processed_count = 0
         error_count = 0
         
-        for message in messages:
-            try:
-                message_id = message['id']
-                content = message['content']
+        try:
+            logger.info(f"📋 Processing {len(messages)} messages in batch mode")
+            
+            # Tạo prompt cho nhiều messages
+            batch_content = self.create_batch_prompt(messages)
+            logger.info(f"📝 Batch prompt created with {len(messages)} messages")
+            
+            # Gửi tới Groq để bóc tách thông tin cho tất cả messages
+            logger.info("🤖 Processing batch with Groq...")
+            groq_result = self.process_message_with_groq(batch_content)
+            
+            if groq_result:
+                logger.info(f"✅ Groq batch result received")
                 
-                logger.info(f"Processing message {message_id}")
+                # Parse JSON từ Groq response (expecting array)
+                apartments_data = self.parse_groq_batch_response(groq_result)
                 
-                # Gửi tới Groq để bóc tách thông tin
-                groq_result = self.process_message_with_groq(content)
-                
-                if groq_result:
-                    logger.info(f"Groq result for message {message_id}: {groq_result[:100]}...")
+                if apartments_data and len(apartments_data) > 0:
+                    logger.info(f"📊 Parsed {len(apartments_data)} apartment(s) from batch")
+                    logger.info(f"📋 Processing {len(messages)} message(s)")
                     
-                    # Parse JSON từ Groq response
-                    apartment_data = self.parse_groq_response(groq_result)
+                    # Đảm bảo số lượng apartments khớp với số lượng messages
+                    if len(apartments_data) != len(messages):
+                        logger.warning(f"⚠️ Mismatch: {len(apartments_data)} apartments but {len(messages)} messages")
+                        logger.warning(f"⚠️ Will process {min(len(apartments_data), len(messages))} pairs")
                     
-                    if apartment_data:
-                        # Insert/update vào warehouse database
-                        warehouse_success = self.insert_apartment_via_api(apartment_data)
-                        
-                        if warehouse_success:
-                            # Chỉ cập nhật warehouse_id của tin nhắn sau khi xử lý warehouse thành công
-                            if self.update_message_warehouse_id(message_id, warehouse_success):
-                                processed_count += 1
-                                logger.info(f"Successfully processed message {message_id} with warehouse_id {warehouse_success}")
+                    # Xử lý từng cặp apartment-message
+                    num_to_process = min(len(apartments_data), len(messages))
+                    for i in range(num_to_process):
+                        try:
+                            apartment_data = apartments_data[i]
+                            message_id = messages[i]['id']
+                            
+                            logger.info(f"🏠 Processing apartment {i+1}/{num_to_process} for message {message_id}")
+                            
+                            # Set data_status='REVIEWING' cho apartment data (giống như API test)
+                            apartment_data['data_status'] = 'REVIEWING'
+                            
+                            # Insert vào warehouse database
+                            warehouse_result = self.insert_apartment_via_api(apartment_data)
+                            
+                            if warehouse_result:
+                                logger.info(f"✅ Warehouse insert/update successful for apartment {i+1}")
+                                
+                                # Cập nhật warehouse_id cho tất cả messages cùng content_hash
+                                if isinstance(warehouse_result, int) and message_id:
+                                    logger.info(f"🔄 Attempting to update warehouse_id for message {message_id} to {warehouse_result}")
+                                    
+                                    update_success = self.update_message_warehouse_id(message_id, warehouse_result)
+                                    
+                                    if update_success:
+                                        logger.info(f"✅ Successfully updated warehouse_id for message {message_id}")
+                                        processed_count += 1
+                                    else:
+                                        logger.error(f"❌ Failed to update warehouse_id for message {message_id}")
+                                        error_count += 1
+                                else:
+                                    logger.warning(f"⚠️ Skipping warehouse_id update: warehouse_result={warehouse_result}, message_id={message_id}")
+                                    error_count += 1
                             else:
+                                logger.error(f"❌ Warehouse insert/update failed for apartment {i+1}")
                                 error_count += 1
-                                logger.error(f"Failed to update message {message_id} warehouse_id")
-                        else:
+                                
+                        except Exception as e:
+                            logger.error(f"Error processing apartment {i+1} for message {messages[i].get('id', 'unknown')}: {e}")
                             error_count += 1
-                            logger.error(f"Failed to insert/update apartment for message {message_id}")
-                    else:
-                        error_count += 1
-                        logger.error(f"Failed to parse Groq response for message {message_id}")
                 else:
-                    logger.error(f"Failed to process message {message_id} with Groq")
-                    error_count += 1
-                    
-            except Exception as e:
-                logger.error(f"Error processing message {message.get('id', 'unknown')}: {e}")
-                error_count += 1
+                    logger.error("❌ Failed to parse Groq batch response")
+                    error_count = len(messages)  # Tất cả messages đều lỗi
+            else:
+                logger.error("❌ Failed to process batch with Groq")
+                error_count = len(messages)  # Tất cả messages đều lỗi
+                
+        except Exception as e:
+            logger.error(f"❌ Error in batch processing: {e}")
+            error_count = len(messages)  # Tất cả messages đều lỗi
         
         logger.info(f"Batch processing completed. Processed: {processed_count}, Errors: {error_count}")
         return processed_count, error_count
@@ -747,6 +924,15 @@ class ZaloMessageProcessor:
                         elif not real_insert:
                             logger.info("ℹ️  Test mode - warehouse_id not updated to database")
                         
+                        # Load full apartment data từ warehouse nếu insert thành công
+                        apartment_full_data = None
+                        if isinstance(warehouse_result, int):
+                            logger.info(f"📥 Loading full apartment data for ID: {warehouse_result}")
+                            apartments_result = self.warehouse_service.get_apartments_by_ids([warehouse_result])
+                            if apartments_result.get('success') and apartments_result.get('data'):
+                                apartment_full_data = apartments_result['data'][0]
+                                logger.info(f"✅ Loaded full apartment data")
+                        
                         result = {
                             'message_id': message_id,
                             'message_content': content,
@@ -754,6 +940,7 @@ class ZaloMessageProcessor:
                             'parsed_data': apartment_data,
                             'warehouse_success': True,
                             'apartment_id': warehouse_result if isinstance(warehouse_result, int) else None,
+                            'apartment_full': apartment_full_data,  # Full data from warehouse
                             'real_insert': real_insert,
                             'replaced': current_warehouse_id is not None,
                             'previous_warehouse_id': current_warehouse_id
@@ -863,18 +1050,37 @@ class ZaloMessageProcessor:
         """Chạy scheduler định kỳ (legacy method)"""
         self.run_scheduler_mode()
     
-    def start(self):
-        """Bắt đầu service"""
+    def start(self, interval_minutes: Optional[int] = None):
+        """
+        Bắt đầu service (có thể start từ UI ngay cả khi schedule_enabled=False)
+        
+        Args:
+            interval_minutes: Interval tính bằng phút (optional, nếu không có thì dùng default_interval)
+        """
         if self.is_running:
             logger.warning("Service is already running")
             return
         
-        # Kiểm tra xem schedule có được enable không
-        if not self.schedule_enabled:
-            logger.info("ZaloMessageProcessor schedule is disabled (ZALO_MESSAGE_PROCESSOR_SCHEDULE=0)")
+        # Cho phép set interval động nếu được truyền vào
+        if interval_minutes is not None:
+            self.interval = interval_minutes * 60
+            logger.info(f"Using custom interval: {interval_minutes} minutes")
+        else:
+            # Nếu không có interval tùy chỉnh, dùng default
+            # Nếu default_interval = 0 (ZALO_MESSAGE_PROCESSOR_SCHEDULE=0), dùng 10 phút làm mặc định
+            if self.default_interval > 0:
+                self.interval = self.default_interval
+            else:
+                self.interval = 10 * 60  # 10 phút mặc định khi ZALO_MESSAGE_PROCESSOR_SCHEDULE=0
+                logger.info(f"Default interval is 0, using 10 minutes as fallback")
+        
+        # Validate interval
+        if self.interval <= 0:
+            logger.error("Cannot start schedule with interval <= 0")
             return
         
         self.is_running = True
+        self.started_at = datetime.now().isoformat()
         self.thread = threading.Thread(target=self.run_scheduler, daemon=True)
         self.thread.start()
         
@@ -900,13 +1106,13 @@ class ZaloMessageProcessor:
         
         logger.info("🛑 ZaloMessageProcessor service stopped")
     
-    def run_test_batch_mode(self, message_ids: List[int], real_insert: bool = False):
+    def run_test_batch_mode(self, message_ids: List[int]):
         """
         Chế độ test batch - xử lý nhiều tin nhắn cùng lúc trong một prompt
+        Luôn insert vào warehouse với data_status='REVIEWING' và cập nhật warehouse_id
         
         Args:
             message_ids: List ID của các tin nhắn cần test
-            real_insert: Nếu True, sẽ thực sự insert vào warehouse và cập nhật warehouse_id
             
         Returns:
             Tuple (result_dict, error_message)
@@ -938,6 +1144,7 @@ class ZaloMessageProcessor:
             # Gửi tới Groq để bóc tách thông tin cho tất cả messages
             logger.info("🤖 Processing batch with Groq...")
             groq_result = self.process_message_with_groq(batch_content)
+            print('groq_result', groq_result)
             
             if groq_result:
                 logger.info(f"✅ Groq batch result received")
@@ -945,83 +1152,91 @@ class ZaloMessageProcessor:
                 # Parse JSON từ Groq response (expecting array)
                 apartments_data = self.parse_groq_batch_response(groq_result)
                 
+                
                 if apartments_data and len(apartments_data) > 0:
                     logger.info(f"📊 Parsed {len(apartments_data)} apartment(s) from batch")
+                    logger.info(f"📋 Processing {len(messages)} message(s)")
+                    
+                    # Đảm bảo số lượng apartments khớp với số lượng messages
+                    if len(apartments_data) != len(messages):
+                        logger.warning(f"⚠️ Mismatch: {len(apartments_data)} apartments but {len(messages)} messages")
+                        logger.warning(f"⚠️ Will process {min(len(apartments_data), len(messages))} pairs")
                     
                     # Insert/update vào warehouse database cho từng apartment
                     results = []
                     warehouse_ids = []
                     
-                    # Tạo mapping từ message_id sang apartment_data (nếu có message_id trong apartment_data)
-                    apartment_by_message_id = {}
-                    for apartment_data in apartments_data:
-                        if 'message_id' in apartment_data and apartment_data['message_id']:
-                            apartment_by_message_id[apartment_data['message_id']] = apartment_data
-                    
-                    # Nếu không có message_id trong apartment_data, map theo index
-                    if not apartment_by_message_id:
-                        for i, apartment_data in enumerate(apartments_data):
-                            if i < len(messages):
-                                apartment_by_message_id[messages[i]['id']] = apartment_data
-                    
-                    # Tạo result cho TẤT CẢ messages, không chỉ apartments
-                    for message in messages:
-                        message_id = message['id']
-                        apartment_data = apartment_by_message_id.get(message_id)
+                    # Xử lý từng cặp apartment-message
+                    num_to_process = min(len(apartments_data), len(messages))
+                    for i in range(num_to_process):
+                        apartment_data = apartments_data[i]
+                        message_id = messages[i]['id']
+                        
+                        logger.info(f"🏠 Processing apartment {i+1}/{num_to_process} for message {message_id}")
+                        
+                        # Set data_status='REVIEWING' cho apartment data
+                        apartment_data['data_status'] = 'REVIEWING'
+                        
+                        # Insert vào warehouse database
+                        warehouse_result = self.insert_apartment_via_api(apartment_data)
                         
                         apartment_result = {
                             'message_id': message_id,
                             'apartment_data': apartment_data,
                             'warehouse_success': False,
                             'apartment_id': None,
-                            'real_insert': real_insert,
                             'replaced': False,
-                            'previous_warehouse_id': None
+                            'previous_warehouse_id': None,
+                            'price_rent': apartment_data.get('price_rent'),
+                            'phone_number': apartment_data.get('phone_number')
                         }
                         
-                        if apartment_data:
-                            logger.info(f"🏠 Processing apartment for message {message_id}")
+                        if warehouse_result:
+                            logger.info(f"✅ Warehouse insert/update successful for apartment {i+1}")
+                            apartment_result['warehouse_success'] = True
+                            apartment_result['apartment_id'] = warehouse_result if isinstance(warehouse_result, int) else None
                             
-                            # Insert vào warehouse database
-                            warehouse_result = self.insert_apartment_via_api(apartment_data)
-                            
-                            if warehouse_result:
-                                logger.info(f"✅ Warehouse insert/update successful for message {message_id}")
-                                apartment_result['warehouse_success'] = True
-                                apartment_result['apartment_id'] = warehouse_result if isinstance(warehouse_result, int) else None
+                            # Luôn cập nhật warehouse_id sau khi insert thành công
+                            if isinstance(warehouse_result, int) and message_id:
+                                logger.info(f"🔄 Attempting to update warehouse_id for message {message_id} to {warehouse_result}")
                                 
-                                # Chỉ cập nhật warehouse_id khi real_insert=True
-                                if real_insert and isinstance(warehouse_result, int) and message_id:
-                                    logger.info(f"🔄 Attempting to update warehouse_id for message {message_id} to {warehouse_result}")
-                                    
-                                    # Kiểm tra xem message đã có warehouse_id chưa
-                                    current_message = self.get_message_by_id(message_id)
-                                    current_warehouse_id = current_message.get('warehouse_id') if current_message else None
-                                    
-                                    if current_warehouse_id:
-                                        logger.info(f"🔄 Replacing warehouse_id from {current_warehouse_id} to {warehouse_result} for message {message_id}")
-                                        apartment_result['replaced'] = True
-                                        apartment_result['previous_warehouse_id'] = current_warehouse_id
-                                    else:
-                                        logger.info(f"🆕 Setting warehouse_id {warehouse_result} for message {message_id}")
-                                    
-                                    update_success = self.update_message_warehouse_id(message_id, warehouse_result)
-                                    
-                                    if update_success:
-                                        logger.info(f"✅ Successfully updated warehouse_id for message {message_id}")
-                                        warehouse_ids.append(warehouse_result)
-                                    else:
-                                        logger.error(f"❌ Failed to update warehouse_id for message {message_id}")
-                                elif not real_insert:
-                                    logger.info("ℹ️  Test mode - warehouse_id not updated to database")
+                                # Kiểm tra xem message đã có warehouse_id chưa
+                                current_message = self.get_message_by_id(message_id)
+                                current_warehouse_id = current_message.get('warehouse_id') if current_message else None
+                                
+                                if current_warehouse_id:
+                                    logger.info(f"🔄 Replacing warehouse_id from {current_warehouse_id} to {warehouse_result} for message {message_id}")
+                                    apartment_result['replaced'] = True
+                                    apartment_result['previous_warehouse_id'] = current_warehouse_id
                                 else:
-                                    logger.warning(f"⚠️ Skipping warehouse_id update: real_insert={real_insert}, warehouse_result={warehouse_result}, message_id={message_id}")
+                                    logger.info(f"🆕 Setting warehouse_id {warehouse_result} for message {message_id}")
+                                
+                                update_success = self.update_message_warehouse_id(message_id, warehouse_result)
+                                
+                                if update_success:
+                                    logger.info(f"✅ Successfully updated warehouse_id for message {message_id}")
+                                    warehouse_ids.append(warehouse_result)
+                                else:
+                                    logger.error(f"❌ Failed to update warehouse_id for message {message_id}")
                             else:
-                                logger.error(f"❌ Warehouse insert/update failed for message {message_id}")
+                                logger.warning(f"⚠️ Skipping warehouse_id update: warehouse_result={warehouse_result}, message_id={message_id}")
                         else:
-                            logger.warning(f"⚠️ No apartment data found for message {message_id}")
+                            logger.error(f"❌ Warehouse insert/update failed for apartment {i+1}")
                         
                         results.append(apartment_result)
+                    
+                    # Load full apartment data từ warehouse cho các apartments đã insert thành công
+                    apartment_ids_to_load = [r['apartment_id'] for r in results if r.get('warehouse_success') and r.get('apartment_id')]
+                    full_apartments_data = []
+                    
+                    if apartment_ids_to_load:
+                        logger.info(f"📥 Loading full apartment data for {len(apartment_ids_to_load)} apartments")
+                        apartments_result = self.warehouse_service.get_apartments_by_ids(apartment_ids_to_load)
+                        if apartments_result.get('success'):
+                            full_apartments_data = apartments_result.get('data', [])
+                            logger.info(f"✅ Loaded {len(full_apartments_data)} full apartment records")
+                        else:
+                            logger.warning(f"⚠️ Failed to load full apartment data: {apartments_result.get('error')}")
                     
                     elapsed_time = time.time() - start_time
                     
@@ -1031,11 +1246,11 @@ class ZaloMessageProcessor:
                             'processed_count': len(messages),
                             'apartment_count': len(apartments_data),
                             'successful_count': len([r for r in results if r['warehouse_success']]),
-                            'real_insert': real_insert,
                             'processing_time': elapsed_time
                         },
                         'messages': messages,
-                        'apartments': apartments_data,
+                        'apartments': apartments_data,  # Raw data from Groq
+                        'apartments_full': full_apartments_data,  # Full data from warehouse
                         'results': results,
                         'warehouse_ids': warehouse_ids,
                         'groq_result': groq_result
@@ -1067,34 +1282,6 @@ class ZaloMessageProcessor:
             String prompt cho Groq
         """
         prompt_parts = [
-            "Tôi sẽ gửi cho bạn nhiều tin nhắn về bất động sản. Hãy phân tích từng tin nhắn và trả về thông tin căn hộ dưới dạng JSON array.",
-            "Mỗi tin nhắn sẽ có ID để bạn có thể track. Trả về một array JSON với các object căn hộ.",
-            "",
-            "Format trả về:",
-            "[",
-            "  {",
-            "    \"message_id\": 123,",
-            "    \"property_group_name\": \"Tên dự án\",",
-            "    \"unit_type_name\": \"Loại căn hộ\",",
-            "    \"unit_code\": \"Mã căn\",",
-            "    \"unit_floor_number\": \"Tầng\",",
-            "    \"area_gross\": \"Diện tích\",",
-            "    \"price\": \"Giá\",",
-            "    \"num_bedrooms\": \"Số phòng ngủ\",",
-            "    \"num_bathrooms\": \"Số phòng tắm\",",
-            "    \"direction_door\": \"Hướng cửa\",",
-            "    \"direction_balcony\": \"Hướng ban công\",",
-            "    \"notes\": \"Ghi chú\"",
-            "  },",
-            "  ...",
-            "]",
-            "",
-            "Quy tắc phân tích:",
-            "- Nếu không tìm thấy thông tin nào, trả về null cho trường đó.",
-            "- Nếu bài đăng có giá tiền triệu thì đó là giá thuê, giá tiền tỷ thì đó là giá bán.",
-            "- Nếu người dùng đề cập diện tích mà không nói là loại diện tích gì thì đó chính là diện tích tim tường.",
-            "- Nếu người dùng đề cập hướng mà không nói là hướng cửa chính hay hướng ban công thì đó chính là hướng cửa chính.",
-            "",
             "Các tin nhắn cần phân tích:",
             ""
         ]
@@ -1190,8 +1377,8 @@ class ZaloMessageProcessor:
             'thread_alive': self.thread.is_alive() if self.thread else False,
             'interval': self.interval,
             'interval_minutes': self.interval // 60,
-            'schedule_enabled': self.schedule_enabled,
-            'started_at': datetime.now().isoformat() if self.is_running else None
+            'schedule_enabled': self.schedule_enabled,  # Chỉ là giá trị mặc định từ env
+            'started_at': getattr(self, 'started_at', None)
         }
 
 

@@ -76,6 +76,11 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
                 <span>Zalo Test</span>
               </a>
               
+              <a routerLink="/dashboard/zalo-bot" routerLinkActive="bg-blue-100 text-blue-600"
+                 class="flex items-center px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">
+                <span class="mr-3">🤖</span>
+                <span>Zalo Bot Manager</span>
+              </a>
               
               <a routerLink="/dashboard/products" routerLinkActive="bg-blue-100 text-blue-600"
                  class="flex items-center px-3 py-2 rounded-lg text-gray-700 hover:bg-gray-100 transition-colors">

@@ -1,6 +1,6 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
-from sqlalchemy import Enum, Index
+from sqlalchemy import Enum, Index, FetchedValue
 
 # Tạo db instance riêng
 db = SQLAlchemy()
@@ -454,7 +454,8 @@ class ZaloReceivedMessage(db.Model):
     status_push_kafka = db.Column(db.Integer, default=0)
     warehouse_id = db.Column(db.BigInteger, nullable=True)  # ID của apartment trong warehouse database
     reply_quote = db.Column(db.Text, nullable=True)
-    content_hash = db.Column(db.String(40), nullable=True)  # Generated column - SHA hash of content
+    # content_hash là generated column trong MySQL, không set giá trị khi insert
+    content_hash = db.Column(db.String(40), FetchedValue())  # Generated column - SHA hash of content (MySQL tự tính)
     added_document_chunks = db.Column(db.Boolean, nullable=True)  # New field
     
     # Relationships
@@ -462,6 +463,7 @@ class ZaloReceivedMessage(db.Model):
     
     # Note: content_hash is a generated column in the database
     # It will be automatically calculated by MySQL based on the content field
+    # SQLAlchemy sẽ không include column này trong INSERT statement
     
     def to_dict(self):
         return {

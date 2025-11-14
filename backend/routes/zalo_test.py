@@ -13,7 +13,7 @@ zalo_test_bp = Blueprint('zalo_test', __name__)
 
 @zalo_test_bp.route('/process-message', methods=['POST'])
 def test_process_message():
-    """Test xử lý một tin nhắn cụ thể"""
+    """Test xử lý batch tin nhắn (chỉ hỗ trợ message_ids array)"""
     try:
         data = request.get_json()
         
@@ -23,21 +23,19 @@ def test_process_message():
                 'error': 'No JSON data provided'
             }), 400
         
-        message_id = data.get('message_id')
-        message_ids = data.get('message_ids')  # Array of message IDs
-        message_content = data.get('message_content')
-        real_insert = data.get('real_insert', False)  # Mặc định là False (test mode)
+        message_ids = data.get('message_ids')  # Array of message IDs (required)
+        message_content = data.get('message_content')  # Optional: for testing content directly
         
-        if not message_id and not message_ids and not message_content:
-            return jsonify({
-                'success': False,
-                'error': 'Either message_id, message_ids array, or message_content is required'
-            }), 400
-        
-        # Nếu có message_ids array, xử lý nhiều messages cùng lúc
+        # Nếu có message_ids array, xử lý batch messages
         if message_ids:
-            logger.info(f"Testing batch message processing for IDs: {message_ids}, real_insert: {real_insert}")
-            result, error = zalo_processor.run_test_batch_mode(message_ids, real_insert=real_insert)
+            if not isinstance(message_ids, list) or len(message_ids) == 0:
+                return jsonify({
+                    'success': False,
+                    'error': 'message_ids must be a non-empty array'
+                }), 400
+            
+            logger.info(f"Processing batch messages for IDs: {message_ids}")
+            result, error = zalo_processor.run_test_batch_mode(message_ids)
             
             if error:
                 return jsonify({
@@ -51,24 +49,7 @@ def test_process_message():
                 'message': f'Successfully processed {len(message_ids)} messages'
             })
         
-        # Nếu có message_id, lấy tin nhắn từ database
-        elif message_id:
-            logger.info(f"Testing message processing for ID: {message_id}, real_insert: {real_insert}")
-            result, error = zalo_processor.run_test_one_mode(message_id, real_insert=real_insert)
-            
-            if error:
-                return jsonify({
-                    'success': False,
-                    'error': error
-                }), 500
-            
-            return jsonify({
-                'success': True,
-                'data': result,
-                'message': f'Successfully processed message ID: {message_id}'
-            })
-        
-        # Nếu có message_content, xử lý trực tiếp
+        # Nếu có message_content, xử lý trực tiếp (chỉ để test content)
         elif message_content:
             logger.info(f"Testing message processing for content: {message_content[:100]}...")
             
@@ -100,6 +81,12 @@ def test_process_message():
                 'message': 'Successfully processed message content'
             })
         
+        else:
+            return jsonify({
+                'success': False,
+                'error': 'Either message_ids array or message_content is required'
+            }), 400
+        
     except Exception as e:
         logger.error(f"Error in test_process_message: {str(e)}")
         return jsonify({
@@ -107,11 +94,12 @@ def test_process_message():
             'error': str(e)
         }), 500
 
-@zalo_test_bp.route('/unprocessed-messages', methods=['GET'])
-def get_unprocessed_messages():
-    """Lấy danh sách tin nhắn theo warehouse_id"""
+@zalo_test_bp.route('/messages', methods=['GET'])
+def get_messages():
+    """Lấy danh sách messages unique theo content_hash với pagination và filter warehouse_id"""
     try:
         limit = request.args.get('limit', 20, type=int)
+        offset = request.args.get('offset', 0, type=int)
         warehouse_id = request.args.get('warehouse_id', 'NULL', type=str)
         
         # Validate warehouse_id parameter
@@ -122,21 +110,49 @@ def get_unprocessed_messages():
                 'error': f'Invalid warehouse_id. Must be one of: {valid_warehouse_ids} or a specific ID number'
             }), 400
         
-        messages = zalo_processor.get_unprocessed_messages(limit=limit, warehouse_id=warehouse_id)
+        # Validate pagination parameters
+        if limit <= 0 or limit > 1000:
+            return jsonify({
+                'success': False,
+                'error': 'limit must be between 1 and 1000'
+            }), 400
+        
+        if offset < 0:
+            return jsonify({
+                'success': False,
+                'error': 'offset must be >= 0'
+            }), 400
+        
+        result = zalo_processor.get_unprocessed_messages(limit=limit, offset=offset, warehouse_id=warehouse_id)
+        
+        # result is now a dict with 'messages' and 'total'
+        messages = result.get('messages', [])
+        total_count = result.get('total', 0)
         
         return jsonify({
             'success': True,
             'data': messages,
             'count': len(messages),
+            'total': total_count,
+            'limit': limit,
+            'offset': offset,
             'warehouse_id_filter': warehouse_id
         })
         
     except Exception as e:
-        logger.error(f"Error in get_unprocessed_messages: {str(e)}")
+        logger.error(f"Error in get_messages: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)
         }), 500
+
+@zalo_test_bp.route('/unprocessed-messages', methods=['GET'])
+def get_unprocessed_messages_deprecated():
+    """
+    DEPRECATED: Sử dụng /messages thay thế
+    Route này được giữ lại để backward compatibility
+    """
+    return get_messages()
 
 @zalo_test_bp.route('/processor-status', methods=['GET'])
 def get_processor_status():
@@ -202,6 +218,82 @@ def batch_process_messages():
         
     except Exception as e:
         logger.error(f"Error in batch_process_messages: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@zalo_test_bp.route('/schedule/start', methods=['POST'])
+def start_schedule():
+    """
+    Bắt đầu schedule
+    Body (optional): {"interval_minutes": 10} - Interval tính bằng phút
+    """
+    try:
+        if zalo_processor.is_running:
+            return jsonify({
+                'success': False,
+                'error': 'Schedule is already running'
+            }), 400
+        
+        # Lấy interval từ request body (optional)
+        data = request.get_json() or {}
+        interval_minutes = data.get('interval_minutes')
+        
+        # Validate interval nếu có
+        if interval_minutes is not None:
+            if not isinstance(interval_minutes, int) or interval_minutes <= 0:
+                return jsonify({
+                    'success': False,
+                    'error': 'interval_minutes must be a positive integer'
+                }), 400
+            if interval_minutes > 1440:  # Max 24 hours
+                return jsonify({
+                    'success': False,
+                    'error': 'interval_minutes must be <= 1440 (24 hours)'
+                }), 400
+        
+        # Start schedule (có thể với interval tùy chỉnh)
+        # Cho phép start ngay cả khi schedule_enabled=False (ZALO_MESSAGE_PROCESSOR_SCHEDULE=0)
+        zalo_processor.start(interval_minutes=interval_minutes)
+        
+        status = zalo_processor.get_status()
+        
+        return jsonify({
+            'success': True,
+            'data': status,
+            'message': f'Schedule started successfully with interval: {status["interval_minutes"]} minutes'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in start_schedule: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@zalo_test_bp.route('/schedule/stop', methods=['POST'])
+def stop_schedule():
+    """Dừng schedule"""
+    try:
+        if not zalo_processor.is_running:
+            return jsonify({
+                'success': False,
+                'error': 'Schedule is not running'
+            }), 400
+        
+        zalo_processor.stop()
+        
+        status = zalo_processor.get_status()
+        
+        return jsonify({
+            'success': True,
+            'data': status,
+            'message': 'Schedule stopped successfully'
+        })
+        
+    except Exception as e:
+        logger.error(f"Error in stop_schedule: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

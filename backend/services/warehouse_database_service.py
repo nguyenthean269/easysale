@@ -188,6 +188,10 @@ class WarehouseDatabaseService:
                 'price_loan': apartment_data.get('price_loan'),
                 'notes': apartment_data.get('notes'),
                 'status': apartment_data.get('status'),
+                'data_status': apartment_data.get('data_status', 'PENDING'),  # Default to PENDING
+                'listing_type': apartment_data.get('listing_type'),
+                'phone_number': apartment_data.get('phone_number'),
+                'price_rent': apartment_data.get('price_rent'),
                 'unit_allocation': 'QUY_CHEO'  # Luôn set mặc định
             }
             
@@ -264,6 +268,7 @@ class WarehouseDatabaseService:
                     'price_loan': apartment_data.get('price_loan'),
                     'notes': apartment_data.get('notes'),
                     'status': apartment_data.get('status'),
+                    'data_status': apartment_data.get('data_status', 'PENDING'),  # Default to PENDING
                     'unit_allocation': 'QUY_CHEO'  # Hardcode
                 }
                 

@@ -4,8 +4,8 @@ import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
 
 export interface ZaloTestMessage {
-  message_id?: number;
-  message_content?: string;
+  message_ids?: number[];  // Array of message IDs (required for batch processing)
+  message_content?: string;  // Optional: for testing content directly
 }
 
 export interface ZaloTestResponse {
@@ -61,17 +61,26 @@ export class ZaloTestService {
   constructor(private http: HttpClient) {}
 
   /**
-   * Test xử lý một tin nhắn cụ thể
+   * Test xử lý batch tin nhắn (chỉ hỗ trợ message_ids array)
+   * @deprecated Sử dụng processMessagesBatch() thay thế
    */
   testProcessMessage(data: ZaloTestMessage): Observable<ZaloTestResponse> {
     return this.http.post<ZaloTestResponse>(`${this.apiUrl}/process-message`, data);
   }
 
   /**
-   * Lấy danh sách tin nhắn theo warehouse_id
+   * Lấy danh sách messages unique theo content_hash với pagination và filter warehouse_id
+   */
+  getMessages(limit: number = 20, offset: number = 0, warehouse_id: string = 'NULL'): Observable<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; total: number; limit: number; offset: number; warehouse_id_filter: string }> {
+    return this.http.get<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; total: number; limit: number; offset: number; warehouse_id_filter: string }>(`${this.apiUrl}/messages?limit=${limit}&offset=${offset}&warehouse_id=${warehouse_id}`);
+  }
+
+  /**
+   * @deprecated Sử dụng getMessages() thay thế
+   * Lấy danh sách tin nhắn theo warehouse_id (backward compatibility)
    */
   getUnprocessedMessages(limit: number = 20, warehouse_id: string = 'NULL'): Observable<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; warehouse_id_filter: string }> {
-    return this.http.get<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; warehouse_id_filter: string }>(`${this.apiUrl}/unprocessed-messages?limit=${limit}&warehouse_id=${warehouse_id}`);
+    return this.http.get<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; warehouse_id_filter: string }>(`${this.apiUrl}/messages?limit=${limit}&offset=0&warehouse_id=${warehouse_id}`);
   }
 
   /**
@@ -97,11 +106,25 @@ export class ZaloTestService {
 
   /**
    * Xử lý nhiều messages cùng lúc với array message_ids
+   * Luôn insert vào warehouse với data_status='REVIEWING' và cập nhật warehouse_id
    */
-  processMessagesBatch(messageIds: number[], realInsert: boolean = false): Observable<ZaloTestResponse> {
+  processMessagesBatch(messageIds: number[]): Observable<ZaloTestResponse> {
     return this.http.post<ZaloTestResponse>(`${this.apiUrl}/process-message`, { 
-      message_ids: messageIds, 
-      real_insert: realInsert 
+      message_ids: messageIds
     });
+  }
+
+  /**
+   * Bắt đầu schedule
+   */
+  startSchedule(): Observable<ZaloTestResponse & { data: ProcessorStatus }> {
+    return this.http.post<ZaloTestResponse & { data: ProcessorStatus }>(`${this.apiUrl}/schedule/start`, {});
+  }
+
+  /**
+   * Dừng schedule
+   */
+  stopSchedule(): Observable<ZaloTestResponse & { data: ProcessorStatus }> {
+    return this.http.post<ZaloTestResponse & { data: ProcessorStatus }>(`${this.apiUrl}/schedule/stop`, {});
   }
 }

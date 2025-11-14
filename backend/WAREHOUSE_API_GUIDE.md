@@ -279,3 +279,4 @@ curl -X POST http://localhost:5000/warehouse/api/warehouse/apartments/batch-inse
 
 
 
+

@@ -60,6 +60,10 @@ class Config:
     # Facebook Configuration
     FACEBOOK_VERIFY_TOKEN = os.getenv('FACEBOOK_VERIFY_TOKEN', 'your-facebook-verify-token')
     FACEBOOK_APP_SECRET = os.getenv('FACEBOOK_APP_SECRET', '')
+    
+    # Kafka Configuration
+    KAFKA_BOOTSTRAP_SERVERS = os.getenv('KAFKA_BOOTSTRAP_SERVERS', 'localhost:9092')
+    KAFKA_TOPIC = os.getenv('KAFKA_TOPIC', 'zalo_messages')
 
 class DevelopmentConfig(Config):
     """Development configuration"""

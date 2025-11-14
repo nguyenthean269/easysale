@@ -56,9 +56,13 @@ def validate_apartment_item(item: Dict[str, Any]) -> Dict[str, Any]:
         'price_early': 'float',
         'price_schedule': 'float',
         'price_loan': 'float',
+        'price_rent': 'float',
         'notes': 'str',
         'status': 'str',
-        'unit_allocation': 'str'
+        'data_status': 'str',
+        'unit_allocation': 'str',
+        'listing_type': 'str',
+        'phone_number': 'str'
     }
     
     cleaned_item = {}
@@ -98,8 +102,15 @@ def validate_apartment_item(item: Dict[str, Any]) -> Dict[str, Any]:
     if cleaned_item.get('status') not in ['CHUA_BAN', 'DA_LOCK', 'DA_COC', 'DA_BAN', None]:
         cleaned_item['status'] = None
     
+    if cleaned_item.get('data_status') not in ['REVIEWING', 'PENDING', 'APPROVED', None]:
+        cleaned_item['data_status'] = 'PENDING'  # Default value
+    
     if cleaned_item.get('unit_allocation') not in ['QUY_CHEO', 'QUY_DOI', None]:
         cleaned_item['unit_allocation'] = 'QUY_CHEO'  # Default value
+    
+    # Validate listing_type enum values
+    if cleaned_item.get('listing_type') not in ['CAN_THUE', 'CAN_CHO_THUE', 'CAN_BAN', 'CAN_MUA', 'KHAC', None]:
+        cleaned_item['listing_type'] = None
     
     return cleaned_item
 
@@ -166,15 +177,15 @@ def batch_insert_apartments():
                 area_land, area_construction, area_net, area_gross,
                 num_bedrooms, num_bathrooms, type_view,
                 direction_door, direction_balcony,
-                price, price_early, price_schedule, price_loan,
-                notes, status, unit_allocation
+                price, price_early, price_schedule, price_loan, price_rent,
+                notes, status, unit_allocation, listing_type, phone_number
             ) VALUES (
                 %(property_group)s, %(unit_type)s, %(unit_code)s, %(unit_axis)s, %(unit_floor_number)s,
                 %(area_land)s, %(area_construction)s, %(area_net)s, %(area_gross)s,
                 %(num_bedrooms)s, %(num_bathrooms)s, %(type_view)s,
                 %(direction_door)s, %(direction_balcony)s,
-                %(price)s, %(price_early)s, %(price_schedule)s, %(price_loan)s,
-                %(notes)s, %(status)s, %(unit_allocation)s
+                %(price)s, %(price_early)s, %(price_schedule)s, %(price_loan)s, %(price_rent)s,
+                %(notes)s, %(status)s, %(unit_allocation)s, %(listing_type)s, %(phone_number)s
             )
             """
             
@@ -264,15 +275,15 @@ def single_insert_apartment():
                 area_land, area_construction, area_net, area_gross,
                 num_bedrooms, num_bathrooms, type_view,
                 direction_door, direction_balcony,
-                price, price_early, price_schedule, price_loan,
-                notes, status, unit_allocation
+                price, price_early, price_schedule, price_loan, price_rent,
+                notes, status, unit_allocation, listing_type, phone_number
             ) VALUES (
                 %(property_group)s, %(unit_type)s, %(unit_code)s, %(unit_axis)s, %(unit_floor_number)s,
                 %(area_land)s, %(area_construction)s, %(area_net)s, %(area_gross)s,
                 %(num_bedrooms)s, %(num_bathrooms)s, %(type_view)s,
                 %(direction_door)s, %(direction_balcony)s,
-                %(price)s, %(price_early)s, %(price_schedule)s, %(price_loan)s,
-                %(notes)s, %(status)s, %(unit_allocation)s
+                %(price)s, %(price_early)s, %(price_schedule)s, %(price_loan)s, %(price_rent)s,
+                %(notes)s, %(status)s, %(unit_allocation)s, %(listing_type)s, %(phone_number)s
             )
             """
             

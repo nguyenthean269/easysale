@@ -38,8 +38,10 @@ def test_database_connections():
         
         # Test 3: Get unprocessed messages
         print("3. Testing get unprocessed messages...")
-        messages = processor.get_unprocessed_messages(limit=5)
-        print(f"   Found {len(messages)} unprocessed messages")
+        result = processor.get_unprocessed_messages(limit=5)
+        messages = result.get('messages', []) if isinstance(result, dict) else result
+        total = result.get('total', len(messages)) if isinstance(result, dict) else len(messages)
+        print(f"   Found {len(messages)} unprocessed messages (total: {total})")
         if messages:
             print(f"   First message: {messages[0]}")
         print()
@@ -59,6 +61,7 @@ def test_database_connections():
 
 if __name__ == "__main__":
     test_database_connections()
+
 
 
 

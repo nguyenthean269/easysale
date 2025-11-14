@@ -28,6 +28,7 @@ export interface Apartment {
   price_rent: number;
   notes: string;
   status: string;
+  data_status: 'REVIEWING' | 'PENDING' | 'APPROVED';
   unit_allocation: string;
 }
 

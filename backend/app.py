@@ -52,6 +52,7 @@ from routes.content import content_bp
 from routes.posts import posts_bp
 from routes.zalo_test import zalo_test_bp
 from routes.warehouse import warehouse_bp
+from routes.zalo_bot import zalo_bot_bp
 
 app.register_blueprint(auth_bp, url_prefix='/auth')
 app.register_blueprint(admin_bp, url_prefix='/admin')
@@ -61,6 +62,7 @@ app.register_blueprint(content_bp, url_prefix='/content')
 app.register_blueprint(posts_bp, url_prefix='/posts')
 app.register_blueprint(zalo_test_bp, url_prefix='/api/zalo-test')
 app.register_blueprint(warehouse_bp, url_prefix='/warehouse')
+app.register_blueprint(zalo_bot_bp, url_prefix='/api/zalo-bot')
 
 # API endpoints cho Zalo Message Processor
 @app.route('/api/zalo-processor/status', methods=['GET'])
@@ -182,26 +184,37 @@ def ratelimit_handler(e):
     }, 429
 
 if __name__ == '__main__':
+    import os
     host = app.config.get('HOST', '0.0.0.0')
     port = app.config.get('PORT', 5000)
     debug = app.config.get('DEBUG', True)
     
-    print(f"🚀 Starting EasySale server...")
-    print(f"   Environment: {app.config.get('FLASK_ENV', 'development')}")
-    print(f"   Database: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not configured')}")
-    print(f"   Server: http://{host}:{port}")
-    print(f"   Debug: {debug}")
-    
-    # Khởi động Zalo Message Processor service
-    try:
-        zalo_processor.start()
-        print("✅ Zalo Message Processor service started")
-    except Exception as e:
-        print(f"❌ Failed to start Zalo Message Processor: {e}")
+    # Chỉ chạy khởi động trong reloader process (child), không chạy trong parent
+    # WERKZEUG_RUN_MAIN chỉ được set trong child process của Flask reloader
+    if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not debug:
+        # Chạy trong child process (reloader) hoặc khi debug=False
+        print(f"🚀 Starting EasySale server...")
+        print(f"   Environment: {app.config.get('FLASK_ENV', 'development')}")
+        print(f"   Database: {app.config.get('SQLALCHEMY_DATABASE_URI', 'Not configured')}")
+        print(f"   Server: http://{host}:{port}")
+        print(f"   Debug: {debug}")
+        
+        # Khởi động Zalo Message Processor service (chỉ khi schedule_enabled=True)
+        status = zalo_processor.get_status()
+        if status.get('schedule_enabled', False):
+            try:
+                zalo_processor.start()
+                print("✅ Zalo Message Processor service started")
+            except Exception as e:
+                print(f"❌ Failed to start Zalo Message Processor: {e}")
+        else:
+            print("⏸️  Zalo Message Processor schedule is disabled (ZALO_MESSAGE_PROCESSOR_SCHEDULE=0)")
+            print("   Use /api/zalo-test/schedule/start to start manually")
     
     try:
         app.run(host=host, port=port, debug=debug)
     finally:
-        # Dừng service khi app shutdown
-        zalo_processor.stop()
-        print("🛑 Zalo Message Processor service stopped") 
+        # Dừng service khi app shutdown (chỉ trong child process)
+        if os.environ.get('WERKZEUG_RUN_MAIN') == 'true' or not debug:
+            zalo_processor.stop()
+            print("🛑 Zalo Message Processor service stopped") 

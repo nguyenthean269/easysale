@@ -19,3 +19,4 @@ ADD INDEX idx_apartment_id (apartment_id);
 
 
 
+
