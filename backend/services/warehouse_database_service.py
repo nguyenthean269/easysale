@@ -192,6 +192,10 @@ class WarehouseDatabaseService:
                 'listing_type': apartment_data.get('listing_type'),
                 'phone_number': apartment_data.get('phone_number'),
                 'price_rent': apartment_data.get('price_rent'),
+                'furnished_status': apartment_data.get('furnished_status'),
+                'floor_level_category': apartment_data.get('floor_level_category'),
+                'move_in_ready': apartment_data.get('move_in_ready'),
+                'includes_transfer_fees': apartment_data.get('includes_transfer_fees'),
                 'unit_allocation': 'QUY_CHEO'  # Luôn set mặc định
             }
             
@@ -344,7 +348,7 @@ class WarehouseDatabaseService:
             if connection:
                 connection.close()
     
-    def get_apartments_list(self, limit: int = 100, offset: int = 0, property_group_id: Optional[int] = None, unit_type_id: Optional[int] = None) -> Dict:
+    def get_apartments_list(self, limit: int = 100, offset: int = 0, property_group_id: Optional[int] = None, unit_type_id: Optional[int] = None, listing_type: Optional[str] = None, price_from: Optional[float] = None, price_to: Optional[float] = None, area_from: Optional[float] = None, area_to: Optional[float] = None) -> Dict:
         """
         Lấy danh sách apartments với thông tin property_group và unit_type
         
@@ -353,6 +357,11 @@ class WarehouseDatabaseService:
             offset: Vị trí bắt đầu (default: 0)
             property_group_id: Filter theo property_group_id (optional)
             unit_type_id: Filter theo unit_type_id (optional)
+            listing_type: Filter theo listing_type (optional): CAN_THUE, CAN_CHO_THUE, CAN_BAN, CAN_MUA, KHAC
+            price_from: Filter giá từ (optional)
+            price_to: Filter giá đến (optional)
+            area_from: Filter diện tích từ (optional)
+            area_to: Filter diện tích đến (optional)
             
         Returns:
             Dict chứa danh sách apartments và metadata
@@ -398,7 +407,13 @@ class WarehouseDatabaseService:
                     a.price_rent,
                     a.notes,
                     a.status,
-                    a.unit_allocation
+                    a.unit_allocation,
+                    a.furnished_status,
+                    a.floor_level_category,
+                    a.move_in_ready,
+                    a.includes_transfer_fees,
+                    a.listing_type,
+                    a.phone_number
                 FROM apartments a
                 LEFT JOIN property_groups pg ON a.property_group = pg.id
                 LEFT JOIN types_unit ut ON a.unit_type = ut.id
@@ -415,6 +430,26 @@ class WarehouseDatabaseService:
                 if unit_type_id is not None:
                     where_conditions.append("a.unit_type = :unit_type_id")
                     params['unit_type_id'] = unit_type_id
+                
+                if listing_type is not None:
+                    where_conditions.append("a.listing_type = :listing_type")
+                    params['listing_type'] = listing_type
+                
+                if price_from is not None:
+                    where_conditions.append("a.price >= :price_from")
+                    params['price_from'] = price_from
+                
+                if price_to is not None:
+                    where_conditions.append("a.price <= :price_to")
+                    params['price_to'] = price_to
+                
+                if area_from is not None:
+                    where_conditions.append("(a.area_net >= :area_from OR a.area_gross >= :area_from)")
+                    params['area_from'] = area_from
+                
+                if area_to is not None:
+                    where_conditions.append("(a.area_net <= :area_to OR a.area_gross <= :area_to)")
+                    params['area_to'] = area_to
                 
                 where_clause = ""
                 if where_conditions:
@@ -537,7 +572,11 @@ class WarehouseDatabaseService:
                     a.price_rent,
                     a.notes,
                     a.status,
-                    a.unit_allocation
+                    a.unit_allocation,
+                    a.furnished_status,
+                    a.floor_level_category,
+                    a.move_in_ready,
+                    a.includes_transfer_fees
                 FROM apartments a
                 LEFT JOIN property_groups pg ON a.property_group = pg.id
                 LEFT JOIN types_unit ut ON a.unit_type = ut.id
@@ -668,7 +707,11 @@ class WarehouseDatabaseService:
                     a.price_rent,
                     a.notes,
                     a.status,
-                    a.unit_allocation
+                    a.unit_allocation,
+                    a.furnished_status,
+                    a.floor_level_category,
+                    a.move_in_ready,
+                    a.includes_transfer_fees
                 FROM apartments a
                 LEFT JOIN property_groups pg ON a.property_group = pg.id
                 LEFT JOIN types_unit ut ON a.unit_type = ut.id

@@ -44,6 +44,20 @@ import { AuthService } from '../../services/auth.service';
             Products
           </a>
           <a 
+            routerLink="/can-ho-chung-cu-ban" 
+            routerLinkActive="text-blue-600 font-medium"
+            [routerLinkActiveOptions]="{exact: false}"
+            class="text-gray-600 hover:text-blue-600 transition-colors">
+            Căn hộ bán
+          </a>
+          <a 
+            routerLink="/can-ho-chung-cu-cho-thue" 
+            routerLinkActive="text-blue-600 font-medium"
+            [routerLinkActiveOptions]="{exact: false}"
+            class="text-gray-600 hover:text-blue-600 transition-colors">
+            Căn hộ cho thuê
+          </a>
+          <a 
             routerLink="/about" 
             routerLinkActive="text-blue-600 font-medium"
             class="text-gray-600 hover:text-blue-600 transition-colors">

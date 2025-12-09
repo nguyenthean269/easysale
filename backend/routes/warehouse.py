@@ -365,6 +365,11 @@ def get_apartments_list():
     - offset: Vị trí bắt đầu (default: 0)
     - property_group_id: Filter theo property_group_id (optional)
     - unit_type_id: Filter theo unit_type_id (optional)
+    - listing_type: Filter theo listing_type (optional): CAN_THUE, CAN_CHO_THUE, CAN_BAN, CAN_MUA, KHAC
+    - price_from: Filter giá từ (optional)
+    - price_to: Filter giá đến (optional)
+    - area_from: Filter diện tích từ (optional)
+    - area_to: Filter diện tích đến (optional)
     """
     try:
         # Lấy query parameters
@@ -372,6 +377,11 @@ def get_apartments_list():
         offset = request.args.get('offset', 0, type=int)
         property_group_id = request.args.get('property_group_id', type=int)
         unit_type_id = request.args.get('unit_type_id', type=int)
+        listing_type = request.args.get('listing_type', type=str)
+        price_from = request.args.get('price_from', type=float)
+        price_to = request.args.get('price_to', type=float)
+        area_from = request.args.get('area_from', type=float)
+        area_to = request.args.get('area_to', type=float)
         
         # Validate parameters
         if limit <= 0 or limit > 1000:
@@ -386,14 +396,25 @@ def get_apartments_list():
                 'error': 'offset must be >= 0'
             }), 400
         
-        logger.info(f"Getting apartments list: limit={limit}, offset={offset}, property_group_id={property_group_id}, unit_type_id={unit_type_id}")
+        if listing_type and listing_type not in ['CAN_THUE', 'CAN_CHO_THUE', 'CAN_BAN', 'CAN_MUA', 'KHAC']:
+            return jsonify({
+                'success': False,
+                'error': 'listing_type must be one of: CAN_THUE, CAN_CHO_THUE, CAN_BAN, CAN_MUA, KHAC'
+            }), 400
+        
+        logger.info(f"Getting apartments list: limit={limit}, offset={offset}, property_group_id={property_group_id}, unit_type_id={unit_type_id}, listing_type={listing_type}, price_from={price_from}, price_to={price_to}, area_from={area_from}, area_to={area_to}")
         
         # Gọi service method
         result = warehouse_service.get_apartments_list(
             limit=limit,
             offset=offset,
             property_group_id=property_group_id,
-            unit_type_id=unit_type_id
+            unit_type_id=unit_type_id,
+            listing_type=listing_type,
+            price_from=price_from,
+            price_to=price_to,
+            area_from=area_from,
+            area_to=area_to
         )
         
         if result['success']:

@@ -355,6 +355,24 @@ class ZaloMessageProcessor:
         "type": ["string", "null"],
         "enum": ["CHUA_BAN", "DA_LOCK", "DA_COC", "DA_BAN", null],
         "description": "Trạng thái nếu có"
+      }},
+      "furnished_status": {{
+        "type": ["string", "null"],
+        "enum": ["FULL", "PARTIAL", "UNFURNISHED", null],
+        "description": "Tình trạng nội thất: FULL (đầy đủ nội thất), PARTIAL (nội thất một phần), UNFURNISHED (không nội thất)"
+      }},
+      "floor_level_category": {{
+        "type": ["string", "null"],
+        "enum": ["LOW", "MEDIUM", "HIGH", null],
+        "description": "Vị trí tầng: LOW (tầng thấp 1-10), MEDIUM (tầng trung 11-25), HIGH (tầng cao >25)"
+      }},
+      "move_in_ready": {{
+        "type": ["boolean", "null"],
+        "description": "Căn hộ có sẵn sàng để vào ở ngay không: true=sẵn sàng, false=chưa sẵn sàng"
+      }},
+      "includes_transfer_fees": {{
+        "type": ["boolean", "null"],
+        "description": "Giá đã bao gồm các loại phí chuyển nhượng hay chưa: true=đã bao gồm, false=chưa bao gồm"
       }}
     }},
     "required": ["property_group"],
@@ -377,6 +395,12 @@ class ZaloMessageProcessor:
             - Nếu không tìm thấy thông tin nào, trả về null cho trường đó.
             - Nếu bài đăng ghi tầng 1x thì đó là khoảng tầng 11 đến 19
             - Viết "TC 7tr5" nghĩa là tài chính 7 triệu 500 ngàn , ý là tài chính (ngân sách) 7.5 triệu
+            
+            Lưu ý về các trường mới:
+            - furnished_status: Tìm từ khóa "đầy đủ nội thất", "full nội thất", "có nội thất", "nội thất cao cấp" => FULL; "một phần nội thất", "nội thất cơ bản" => PARTIAL; "không nội thất", "thô", "bàn giao thô" => UNFURNISHED
+            - floor_level_category: Dựa vào unit_floor_number hoặc mô tả trong tin nhắn. Tầng 1-10 => LOW, tầng 11-25 => MEDIUM, tầng >25 => HIGH. Nếu chỉ nói "view đẹp", "tầng cao", "view thoáng" mà không nói số tầng cụ thể thì chọn HIGH
+            - move_in_ready: Tìm từ khóa "vào ở ngay", "sẵn sàng", "bàn giao ngay", "đang trống", "có thể chuyển vào ngay" => true; "đang cho thuê", "cần sửa sang", "đang ở" => false
+            - includes_transfer_fees: Tìm từ khóa "giá full phí", "bao gồm phí", "đã bao gồm phí chuyển nhượng", "giá net" => true; "chưa gồm phí", "phí chuyển nhượng riêng", "giá chưa VAT" => false
 
             
             """

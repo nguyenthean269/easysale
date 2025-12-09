@@ -30,6 +30,8 @@ export interface Apartment {
   status: string;
   data_status: 'REVIEWING' | 'PENDING' | 'APPROVED';
   unit_allocation: string;
+  listing_type?: 'CAN_THUE' | 'CAN_CHO_THUE' | 'CAN_BAN' | 'CAN_MUA' | 'KHAC';
+  phone_number?: string;
 }
 
 export interface ApartmentsListResponse {
@@ -71,6 +73,11 @@ export class WarehouseService {
     offset?: number;
     property_group_id?: number;
     unit_type_id?: number;
+    listing_type?: 'CAN_THUE' | 'CAN_CHO_THUE' | 'CAN_BAN' | 'CAN_MUA' | 'KHAC';
+    price_from?: number;
+    price_to?: number;
+    area_from?: number;
+    area_to?: number;
   } = {}): Observable<ApartmentsListResponse> {
     const queryParams = new URLSearchParams();
     
@@ -78,6 +85,11 @@ export class WarehouseService {
     if (params.offset !== undefined) queryParams.set('offset', params.offset.toString());
     if (params.property_group_id !== undefined) queryParams.set('property_group_id', params.property_group_id.toString());
     if (params.unit_type_id !== undefined) queryParams.set('unit_type_id', params.unit_type_id.toString());
+    if (params.listing_type !== undefined) queryParams.set('listing_type', params.listing_type);
+    if (params.price_from !== undefined) queryParams.set('price_from', params.price_from.toString());
+    if (params.price_to !== undefined) queryParams.set('price_to', params.price_to.toString());
+    if (params.area_from !== undefined) queryParams.set('area_from', params.area_from.toString());
+    if (params.area_to !== undefined) queryParams.set('area_to', params.area_to.toString());
 
     const url = `${this.apiUrl}/apartments/list${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     return this.http.get<ApartmentsListResponse>(url);

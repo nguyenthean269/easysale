@@ -91,8 +91,8 @@ def register():
         return jsonify({'error': 'Lỗi server, vui lòng thử lại sau'}), 500
 
 @auth_bp.route('/login', methods=['POST'])
-@apply_rate_limit("10 per minute")
-@apply_rate_limit("50 per hour")
+@apply_rate_limit("50 per minute")
+@apply_rate_limit("100 per hour")
 def login():
     try:
         data = request.get_json()
