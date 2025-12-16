@@ -348,7 +348,7 @@ class WarehouseDatabaseService:
             if connection:
                 connection.close()
     
-    def get_apartments_list(self, limit: int = 100, offset: int = 0, property_group_id: Optional[int] = None, unit_type_id: Optional[int] = None, listing_type: Optional[str] = None, price_from: Optional[float] = None, price_to: Optional[float] = None, area_from: Optional[float] = None, area_to: Optional[float] = None) -> Dict:
+    def get_apartments_list(self, limit: int = 100, offset: int = 0, property_group_id: Optional[int] = None, property_group_slug: Optional[str] = None, unit_type_id: Optional[int] = None, listing_type: Optional[str] = None, price_from: Optional[float] = None, price_to: Optional[float] = None, area_from: Optional[float] = None, area_to: Optional[float] = None) -> Dict:
         """
         Lấy danh sách apartments với thông tin property_group và unit_type
         
@@ -356,6 +356,7 @@ class WarehouseDatabaseService:
             limit: Số lượng records tối đa (default: 100)
             offset: Vị trí bắt đầu (default: 0)
             property_group_id: Filter theo property_group_id (optional)
+            property_group_slug: Filter theo property_group slug (optional)
             unit_type_id: Filter theo unit_type_id (optional)
             listing_type: Filter theo listing_type (optional): CAN_THUE, CAN_CHO_THUE, CAN_BAN, CAN_MUA, KHAC
             price_from: Filter giá từ (optional)
@@ -423,7 +424,48 @@ class WarehouseDatabaseService:
                 where_conditions = []
                 params = {}
                 
-                if property_group_id is not None:
+                if property_group_slug is not None:
+                    # Filter theo slug - cần lấy tất cả property groups con (recursive)
+                    # Sử dụng recursive CTE để lấy tất cả children và grandchildren
+                    # First, get the root property group ID by slug
+                    root_query = text("SELECT id FROM property_groups WHERE slug = :slug")
+                    root_result = connection.execute(root_query, {'slug': property_group_slug})
+                    root_row = root_result.fetchone()
+                    
+                    if root_row:
+                        root_id = root_row[0]
+                        # Use recursive CTE to get all descendant property group IDs
+                        # MySQL 8.0+ supports recursive CTE
+                        recursive_cte = text("""
+                        WITH RECURSIVE property_group_tree AS (
+                            -- Base case: start with the root property group
+                            SELECT id FROM property_groups WHERE id = :root_id
+                            UNION ALL
+                            -- Recursive case: get all children
+                            SELECT pg.id 
+                            FROM property_groups pg
+                            INNER JOIN property_group_tree pgt ON pg.parent_id = pgt.id
+                        )
+                        SELECT id FROM property_group_tree
+                        """)
+                        descendant_result = connection.execute(recursive_cte, {'root_id': root_id})
+                        descendant_ids = [row[0] for row in descendant_result.fetchall()]
+                        
+                        if descendant_ids:
+                            # Filter apartments by all descendant property group IDs
+                            # Use SQLAlchemy text() with IN clause
+                            placeholders = ','.join([f':id{i}' for i in range(len(descendant_ids))])
+                            where_conditions.append(f"a.property_group IN ({placeholders})")
+                            for i, pg_id in enumerate(descendant_ids):
+                                params[f'id{i}'] = pg_id
+                        else:
+                            # Only the root group itself, no children
+                            where_conditions.append("a.property_group = :root_property_group_id")
+                            params['root_property_group_id'] = root_id
+                    else:
+                        # If slug not found, return empty result
+                        where_conditions.append("1 = 0")  # Always false condition
+                elif property_group_id is not None:
                     where_conditions.append("a.property_group = :property_group_id")
                     params['property_group_id'] = property_group_id
                 

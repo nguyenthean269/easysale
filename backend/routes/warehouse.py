@@ -364,6 +364,7 @@ def get_apartments_list():
     - limit: Số lượng records tối đa (default: 100)
     - offset: Vị trí bắt đầu (default: 0)
     - property_group_id: Filter theo property_group_id (optional)
+    - property_group_slug: Filter theo property_group slug (optional)
     - unit_type_id: Filter theo unit_type_id (optional)
     - listing_type: Filter theo listing_type (optional): CAN_THUE, CAN_CHO_THUE, CAN_BAN, CAN_MUA, KHAC
     - price_from: Filter giá từ (optional)
@@ -376,6 +377,7 @@ def get_apartments_list():
         limit = request.args.get('limit', 100, type=int)
         offset = request.args.get('offset', 0, type=int)
         property_group_id = request.args.get('property_group_id', type=int)
+        property_group_slug = request.args.get('property_group_slug', type=str)
         unit_type_id = request.args.get('unit_type_id', type=int)
         listing_type = request.args.get('listing_type', type=str)
         price_from = request.args.get('price_from', type=float)
@@ -402,13 +404,14 @@ def get_apartments_list():
                 'error': 'listing_type must be one of: CAN_THUE, CAN_CHO_THUE, CAN_BAN, CAN_MUA, KHAC'
             }), 400
         
-        logger.info(f"Getting apartments list: limit={limit}, offset={offset}, property_group_id={property_group_id}, unit_type_id={unit_type_id}, listing_type={listing_type}, price_from={price_from}, price_to={price_to}, area_from={area_from}, area_to={area_to}")
+        logger.info(f"Getting apartments list: limit={limit}, offset={offset}, property_group_id={property_group_id}, property_group_slug={property_group_slug}, unit_type_id={unit_type_id}, listing_type={listing_type}, price_from={price_from}, price_to={price_to}, area_from={area_from}, area_to={area_to}")
         
         # Gọi service method
         result = warehouse_service.get_apartments_list(
             limit=limit,
             offset=offset,
             property_group_id=property_group_id,
+            property_group_slug=property_group_slug,
             unit_type_id=unit_type_id,
             listing_type=listing_type,
             price_from=price_from,
@@ -557,6 +560,117 @@ def search_apartments():
             
     except Exception as e:
         logger.error(f"Error in search_apartments: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@warehouse_bp.route('/api/warehouse/property-groups', methods=['GET'])
+def get_property_groups():
+    """
+    Lấy danh sách property groups theo parent_id hoặc slug
+    Query parameters:
+    - parent_id: ID của parent group (optional, None để lấy root groups)
+    - slug: Slug của property group để lấy children (optional)
+    """
+    try:
+        # Lấy query parameters
+        parent_id = request.args.get('parent_id', type=int)
+        slug = request.args.get('slug', type=str)
+        
+        connection = get_warehouse_connection()
+        if not connection:
+            return jsonify({
+                'success': False,
+                'error': 'Database connection failed'
+            }), 500
+        
+        try:
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+            
+            # Query property groups với join types_group để lấy type name
+            if slug:
+                # Lấy property group theo slug để lấy ID, sau đó lấy children
+                query = """
+                    SELECT pg.id, pg.name, pg.description, pg.thumbnail, pg.slug,
+                           pg.parent_id, pg.group_type, tg.name as group_type_name
+                    FROM property_groups pg 
+                    LEFT JOIN types_group tg ON pg.group_type = tg.id 
+                    WHERE pg.slug = %s
+                    ORDER BY pg.name
+                    LIMIT 1
+                """
+                cursor.execute(query, (slug,))
+                parent_group = cursor.fetchone()
+                
+                if parent_group:
+                    # Lấy children của property group này
+                    query = """
+                        SELECT pg.id, pg.name, pg.description, pg.thumbnail, pg.slug,
+                               pg.parent_id, pg.group_type, tg.name as group_type_name
+                        FROM property_groups pg 
+                        LEFT JOIN types_group tg ON pg.group_type = tg.id 
+                        WHERE pg.parent_id = %s
+                        ORDER BY pg.name
+                    """
+                    cursor.execute(query, (parent_group['id'],))
+                else:
+                    # Slug not found, return empty
+                    cursor.close()
+                    return jsonify({
+                        'success': True,
+                        'data': [],
+                        'count': 0
+                    })
+            elif parent_id is None:
+                query = """
+                    SELECT pg.id, pg.name, pg.description, pg.thumbnail, pg.slug,
+                           pg.parent_id, pg.group_type, tg.name as group_type_name
+                    FROM property_groups pg 
+                    LEFT JOIN types_group tg ON pg.group_type = tg.id 
+                    WHERE pg.parent_id IS NULL
+                    ORDER BY pg.name
+                """
+                cursor.execute(query)
+            else:
+                query = """
+                    SELECT pg.id, pg.name, pg.description, pg.thumbnail, pg.slug,
+                           pg.parent_id, pg.group_type, tg.name as group_type_name
+                    FROM property_groups pg 
+                    LEFT JOIN types_group tg ON pg.group_type = tg.id 
+                    WHERE pg.parent_id = %s
+                    ORDER BY pg.name
+                """
+                cursor.execute(query, (parent_id,))
+            
+            groups = cursor.fetchall()
+            cursor.close()
+            
+            # Convert to list of dicts
+            result = []
+            for group in groups:
+                result.append({
+                    'id': group['id'],
+                    'name': group['name'],
+                    'description': group['description'],
+                    'thumbnail': group['thumbnail'],
+                    'slug': group.get('slug'),
+                    'parent_id': group['parent_id'],
+                    'group_type': group['group_type'],
+                    'group_type_name': group['group_type_name']
+                })
+            
+            return jsonify({
+                'success': True,
+                'data': result,
+                'count': len(result)
+            })
+            
+        finally:
+            connection.close()
+            
+    except Exception as e:
+        logger.error(f"Error in get_property_groups: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

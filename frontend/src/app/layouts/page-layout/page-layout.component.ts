@@ -12,8 +12,8 @@ import { AuthService } from '../../services/auth.service';
   standalone: true,
   imports: [
     CommonModule,
-    RouterOutlet, 
-    RouterLink, 
+    RouterOutlet,
+    RouterLink,
     RouterLinkActive,
     NzLayoutModule,
     NzMenuModule,
@@ -24,8 +24,8 @@ import { AuthService } from '../../services/auth.service';
       <!-- Header -->
       <nz-header class="bg-white border-b border-gray-200 px-6 flex items-center justify-between">
         <div class="flex items-center">
-          <a routerLink="/" class="text-2xl font-bold text-blue-600 no-underline">
-            EasySale
+          <a routerLink="/" class="flex items-center no-underline">
+            <img src="assets/images/logo.png" alt="EasySale" class="h-12 w-auto">
           </a>
         </div>
         
@@ -96,9 +96,9 @@ import { AuthService } from '../../services/auth.service';
       </nz-header>
 
       <!-- Content -->
-      <nz-content class="flex-1">
+      <div class="max-w-6xl mx-auto flex-1">
         <router-outlet></router-outlet>
-      </nz-content>
+      </div>
 
       <!-- Footer -->
       <nz-footer class="bg-gray-50 border-t border-gray-200 text-center py-8">
@@ -125,7 +125,7 @@ export class PageLayoutComponent {
   constructor(
     public authService: AuthService,
     private router: Router
-  ) {}
+  ) { }
 
   logout(): void {
     this.authService.logout();

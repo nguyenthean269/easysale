@@ -4,6 +4,7 @@ from flask_jwt_extended import JWTManager
 from flask_migrate import Migrate
 from flask_limiter import Limiter
 from flask_limiter.util import get_remote_address
+from flask_limiter.errors import RateLimitExceeded
 from models import db
 from config import get_config, validate_config
 from services.zalo_message_processor import zalo_processor
@@ -35,7 +36,7 @@ migrate = Migrate(app, db)
 limiter = Limiter(
     app=app,
     key_func=get_remote_address,
-    default_limits=["200 per day", "50 per hour"],
+    default_limits=["200000 per day", "5000 per hour"],
     storage_uri=app.config.get('RATE_LIMIT_STORAGE_URI', 'memory://')
 )
 
@@ -135,16 +136,32 @@ def expired_token_callback(jwt_header, jwt_payload):
         'expired_at': jwt_payload.get('exp')
     }, 401
 
-# Error handler cho rate limiting
-@app.errorhandler(429)
+# Error handler cho rate limiting - xử lý RateLimitExceeded exception cụ thể
+@app.errorhandler(RateLimitExceeded)
 def ratelimit_handler(e):
+    """Xử lý RateLimitExceeded exception và trả về JSON response có thể serialize"""
+    import time
+    
     # Lấy thông tin retry_after từ exception
     retry_after = None
-    if hasattr(e, 'retry_after') and e.retry_after:
-        retry_after = int(e.retry_after)
-    elif hasattr(e, 'reset_time'):
-        import time
-        retry_after = int(e.reset_time - time.time())
+    try:
+        if hasattr(e, 'retry_after') and e.retry_after is not None:
+            retry_after_value = e.retry_after
+            # Kiểm tra nếu là callable thì gọi nó, nếu không thì dùng trực tiếp
+            if callable(retry_after_value):
+                retry_after = int(retry_after_value())
+            else:
+                retry_after = int(retry_after_value)
+        elif hasattr(e, 'reset_time') and e.reset_time is not None:
+            reset_time_value = e.reset_time
+            # Kiểm tra nếu là callable thì gọi nó, nếu không thì dùng trực tiếp
+            if callable(reset_time_value):
+                reset_time = reset_time_value()
+            else:
+                reset_time = reset_time_value
+            retry_after = max(0, int(reset_time - time.time()))
+    except (ValueError, TypeError, AttributeError):
+        retry_after = None
     
     # Tạo message dựa trên retry_after
     if retry_after and retry_after > 0:
@@ -159,29 +176,68 @@ def ratelimit_handler(e):
     else:
         message = 'Bạn đã vượt quá giới hạn request. Vui lòng thử lại sau.'
     
-    # Đảm bảo tất cả giá trị đều có thể serialize
-    limit_value = getattr(e, 'limit', 'Unknown')
-    if callable(limit_value):
-        limit_value = str(limit_value)
+    # Đảm bảo tất cả giá trị đều có thể serialize - chỉ lấy primitive values
+    limit_value = 'Unknown'
+    try:
+        if hasattr(e, 'limit'):
+            limit_attr = e.limit
+            if callable(limit_attr):
+                limit_value = str(limit_attr)
+            else:
+                limit_value = str(limit_attr) if limit_attr is not None else 'Unknown'
+    except (AttributeError, TypeError):
+        limit_value = 'Unknown'
     
-    remaining_value = getattr(e, 'remaining', 0)
-    if callable(remaining_value):
+    remaining_value = 0
+    try:
+        if hasattr(e, 'remaining'):
+            remaining_attr = e.remaining
+            if callable(remaining_attr):
+                remaining_value = 0
+            else:
+                remaining_value = int(remaining_attr) if remaining_attr is not None else 0
+    except (ValueError, TypeError, AttributeError):
         remaining_value = 0
     
-    reset_time_value = getattr(e, 'reset_time', None)
-    if callable(reset_time_value):
+    reset_time_value = None
+    try:
+        if hasattr(e, 'reset_time'):
+            reset_attr = e.reset_time
+            if callable(reset_attr):
+                reset_time_value = None
+            else:
+                reset_time_value = int(reset_attr) if reset_attr is not None else None
+    except (ValueError, TypeError, AttributeError):
         reset_time_value = None
     
-    return {
+    # Tạo response dict chỉ chứa primitive values
+    response_data = {
         'error': 'Rate limit exceeded',
         'message': message,
-        'retry_after': retry_after,
-        'limit_info': {
+        'retry_after': retry_after
+    }
+    
+    # Chỉ thêm limit_info nếu có giá trị hợp lệ
+    if limit_value != 'Unknown' or remaining_value > 0 or reset_time_value is not None:
+        response_data['limit_info'] = {
             'limit': limit_value,
             'remaining': remaining_value,
             'reset_time': reset_time_value
         }
-    }, 429
+    
+    from flask import jsonify
+    # Trả về status 200 với thông báo limit
+    return jsonify(response_data), 200
+
+# Error handler cho HTTP 429 status code (fallback) - cũng trả về 200
+@app.errorhandler(429)
+def ratelimit_status_handler(e):
+    """Fallback handler cho HTTP 429 status code - trả về 200 với thông báo"""
+    from flask import jsonify
+    return jsonify({
+        'error': 'Rate limit exceeded',
+        'message': 'Bạn đã vượt quá giới hạn request. Vui lòng thử lại sau.'
+    }), 200
 
 if __name__ == '__main__':
     import os

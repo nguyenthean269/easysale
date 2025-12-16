@@ -12,7 +12,7 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
   selector: 'app-admin-layout',
   standalone: true,
   imports: [
-    RouterOutlet, 
+    RouterOutlet,
     RouterLink,
     RouterLinkActive,
     CommonModule,
@@ -26,7 +26,9 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
       <!-- Header -->
       <nz-header class="bg-white border-b border-gray-200 px-6 flex items-center justify-between">
         <div class="flex items-center">
-          <h1 class="text-xl font-semibold text-gray-800 m-0">EasySale Admin</h1>
+          <a routerLink="/dashboard" class="flex items-center no-underline">
+            <img src="assets/images/logo.png" alt="EasySale Admin" class="h-10 w-auto">
+          </a>
         </div>
         <div class="flex items-center space-x-4">
           <span class="text-gray-600">Welcome, {{ authService.getCurrentUser()?.username }}</span>
@@ -151,7 +153,7 @@ export class AdminLayoutComponent implements OnInit {
   constructor(
     private router: Router,
     public authService: AuthService
-  ) {}
+  ) { }
 
   ngOnInit() {
     // Component initialization

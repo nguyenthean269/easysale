@@ -1,61 +1,10 @@
-import { Component } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { NzTableModule } from 'ng-zorro-antd/table';
-import { NzSpinModule } from 'ng-zorro-antd/spin';
-import { NzCardModule } from 'ng-zorro-antd/card';
-import { NzTagModule } from 'ng-zorro-antd/tag';
-import { NzPaginationModule } from 'ng-zorro-antd/pagination';
-import { NzFormModule } from 'ng-zorro-antd/form';
-import { NzInputModule } from 'ng-zorro-antd/input';
-import { NzInputNumberModule } from 'ng-zorro-antd/input-number';
-import { NzButtonModule } from 'ng-zorro-antd/button';
-import { NzGridModule } from 'ng-zorro-antd/grid';
-import { NzSliderModule } from 'ng-zorro-antd/slider';
-import { NzIconModule } from 'ng-zorro-antd/icon';
-import { FormsModule } from '@angular/forms';
-import { WarehouseService } from '../../services/warehouse.service';
-import { ApartmentListingBaseComponent, ApartmentListingConfig } from '../shared/apartment-listing-base.component';
-import { CustomDropdownComponent } from '../shared/custom-dropdown.component';
-import { DanhSachDuAnComponent } from '../shared/danh-sach-du-an/danh-sach-du-an.component';
-
-@Component({
-  selector: 'app-can-ho-chung-cu-ban',
-  standalone: true,
-  imports: [
-    CommonModule,
-    RouterModule,
-    FormsModule,
-    NzTableModule,
-    NzSpinModule,
-    NzCardModule,
-    NzTagModule,
-    NzPaginationModule,
-    NzFormModule,
-    NzInputModule,
-    NzInputNumberModule,
-    NzButtonModule,
-    NzGridModule,
-    NzSliderModule,
-    NzIconModule,
-    CustomDropdownComponent,
-    DanhSachDuAnComponent
-  ],
-  template: `
+export const APARTMENT_LISTING_TEMPLATE = `
   <div class="p-6">
     <div class="bg-white p-6 rounded-lg shadow-sm">
       <div class="space-y-6">
         <div class="flex items-center justify-between">
           <h1 class="text-2xl font-semibold text-gray-800">{{ title }}</h1>
         </div>
-        
-        <!-- Danh sách dự án -->
-        <nz-card nzTitle="Danh sách dự án" [nzBordered]="false" class="mb-4">
-          <app-danh-sach-du-an 
-            [routePath]="config.routePath" 
-            [propertyGroupSlug]="filters.duAnSlug || undefined">
-          </app-danh-sach-du-an>
-        </nz-card>
         
         <!-- Filter Form -->
         <nz-card nzTitle="Bộ lọc" [nzBordered]="false" class="mb-4">
@@ -220,41 +169,5 @@ import { DanhSachDuAnComponent } from '../shared/danh-sach-du-an/danh-sach-du-an
       </div>
     </div>
   </div>
-  `,
-  styles: [`
-    :host ::ng-deep .ant-table {
-      border-radius: 8px;
-      overflow: hidden;
-    }
-    
-    :host ::ng-deep .ant-table-thead > tr > th {
-      background: #fafafa;
-      font-weight: 600;
-    }
-  `]
-})
-export class CanHoChungCuBanComponent extends ApartmentListingBaseComponent {
-  config: ApartmentListingConfig = {
-    routePath: 'can-ho-chung-cu-ban',
-    title: 'Căn hộ chung cư bán',
-    listingType: 'CAN_BAN',
-    priceField: 'price'
-  };
-
-  get title(): string {
-    return this.config.title;
-  }
-
-  get priceColumnLabel(): string {
-    return 'Giá bán (VNĐ)';
-  }
-
-  constructor(
-    warehouseService: WarehouseService,
-    route: ActivatedRoute,
-    router: Router
-  ) {
-    super(warehouseService, route, router);
-  }
-}
+`;
 
