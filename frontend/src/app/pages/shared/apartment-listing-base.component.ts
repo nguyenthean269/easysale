@@ -13,6 +13,8 @@ export interface ApartmentListingConfig {
 export interface ApartmentFilters {
   duAn: number | null;
   duAnSlug: string | null;
+  loaiCanHo: number | null;
+  loaiCanHoSlug: string | null;
   giaTu: number | null;
   giaDen: number | null;
   dienTichTu: number | null;
@@ -39,6 +41,8 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
   filtersBan: ApartmentFiltersBan = {
     duAn: null,
     duAnSlug: null,
+    loaiCanHo: null,
+    loaiCanHoSlug: null,
     giaTu: null,
     giaDen: null,
     dienTichTu: null,
@@ -49,6 +53,8 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
   filtersThue: ApartmentFiltersThue = {
     duAn: null,
     duAnSlug: null,
+    loaiCanHo: null,
+    loaiCanHoSlug: null,
     giaTu: null,
     giaDen: null,
     dienTichTu: null,
@@ -137,6 +143,8 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
     const currentFilters = this.filters;
     currentFilters.duAn = null;
     currentFilters.duAnSlug = null;
+    currentFilters.loaiCanHo = null;
+    currentFilters.loaiCanHoSlug = null;
     currentFilters.giaTu = null;
     currentFilters.giaDen = null;
     currentFilters.dienTichTu = null;
@@ -188,6 +196,12 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
             const dienTichToi = this.parseAreaFromSlug(slug);
             currentFilters.dienTichToi = dienTichToi > 0 ? dienTichToi : null;
           }
+
+          // Parse loại căn hộ slug (e.g., "can-1pn", "can-studio")
+          // Remove "can-" prefix before storing, as DB slug doesn't have it
+          if (trimmedPart.startsWith('can-')) {
+            currentFilters.loaiCanHoSlug = trimmedPart.replace('can-', '');
+          }
         });
 
         // Cập nhật priceRange từ filters sau khi parse
@@ -213,6 +227,10 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
     if (this.filters.duAn) {
       pathParts.push(`du-an-${this.filters.duAn}`);
     }
+    if (this.filters.loaiCanHoSlug) {
+      // Add "can-" prefix to URL, as DB slug doesn't have it
+      pathParts.push(`can-${this.filters.loaiCanHoSlug}`);
+    }
     if (this.filters.giaTu) {
       pathParts.push(`gia-tu-${this.formatPriceToSlug(this.filters.giaTu)}`);
     }
@@ -234,6 +252,8 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
   resetFilters() {
     const currentFilters = this.filters;
     currentFilters.duAn = null;
+    currentFilters.loaiCanHo = null;
+    currentFilters.loaiCanHoSlug = null;
     currentFilters.giaTu = null;
     currentFilters.giaDen = null;
     currentFilters.dienTichTu = null;
@@ -316,6 +336,9 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
       params.property_group_slug = this.filters.duAnSlug;
     } else if (this.filters.duAn) {
       params.property_group_id = this.filters.duAn;
+    }
+    if (this.filters.loaiCanHo) {
+      params.unit_type_id = this.filters.loaiCanHo;
     }
     if (this.filters.giaTu) {
       params.price_from = this.filters.giaTu;

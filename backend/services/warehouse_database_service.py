@@ -348,22 +348,23 @@ class WarehouseDatabaseService:
             if connection:
                 connection.close()
     
-    def get_apartments_list(self, limit: int = 100, offset: int = 0, property_group_id: Optional[int] = None, property_group_slug: Optional[str] = None, unit_type_id: Optional[int] = None, listing_type: Optional[str] = None, price_from: Optional[float] = None, price_to: Optional[float] = None, area_from: Optional[float] = None, area_to: Optional[float] = None) -> Dict:
+    def get_apartments_list(self, limit: int = 100, offset: int = 0, property_group_id: Optional[int] = None, property_group_slug: Optional[str] = None, unit_type_id: Optional[int] = None, unit_type_slug: Optional[str] = None, listing_type: Optional[str] = None, price_from: Optional[float] = None, price_to: Optional[float] = None, area_from: Optional[float] = None, area_to: Optional[float] = None) -> Dict:
         """
         Lấy danh sách apartments với thông tin property_group và unit_type
-        
+
         Args:
             limit: Số lượng records tối đa (default: 100)
             offset: Vị trí bắt đầu (default: 0)
             property_group_id: Filter theo property_group_id (optional)
             property_group_slug: Filter theo property_group slug (optional)
             unit_type_id: Filter theo unit_type_id (optional)
+            unit_type_slug: Filter theo unit_type slug (optional)
             listing_type: Filter theo listing_type (optional): CAN_THUE, CAN_CHO_THUE, CAN_BAN, CAN_MUA, KHAC
             price_from: Filter giá từ (optional)
             price_to: Filter giá đến (optional)
             area_from: Filter diện tích từ (optional)
             area_to: Filter diện tích đến (optional)
-            
+
         Returns:
             Dict chứa danh sách apartments và metadata
         """
@@ -383,7 +384,7 @@ class WarehouseDatabaseService:
                 
                 # Base query với JOIN để lấy tên property_group và unit_type
                 base_query = """
-                SELECT 
+                SELECT
                     a.id,
                     a.property_group,
                     pg.name as property_group_name,
@@ -413,8 +414,7 @@ class WarehouseDatabaseService:
                     a.floor_level_category,
                     a.move_in_ready,
                     a.includes_transfer_fees,
-                    a.listing_type,
-                    a.phone_number
+                    a.listing_type
                 FROM apartments a
                 LEFT JOIN property_groups pg ON a.property_group = pg.id
                 LEFT JOIN types_unit ut ON a.unit_type = ut.id
@@ -469,7 +469,20 @@ class WarehouseDatabaseService:
                     where_conditions.append("a.property_group = :property_group_id")
                     params['property_group_id'] = property_group_id
                 
-                if unit_type_id is not None:
+                if unit_type_slug is not None:
+                    # Filter by unit_type slug - need to get unit_type ID first
+                    unit_type_query = text("SELECT id FROM types_unit WHERE slug = :slug")
+                    unit_type_result = connection.execute(unit_type_query, {'slug': unit_type_slug})
+                    unit_type_row = unit_type_result.fetchone()
+
+                    if unit_type_row:
+                        unit_type_id_from_slug = unit_type_row[0]
+                        where_conditions.append("a.unit_type = :unit_type_id_from_slug")
+                        params['unit_type_id_from_slug'] = unit_type_id_from_slug
+                    else:
+                        # If slug not found, return empty result
+                        where_conditions.append("1 = 0")  # Always false condition
+                elif unit_type_id is not None:
                     where_conditions.append("a.unit_type = :unit_type_id")
                     params['unit_type_id'] = unit_type_id
                 

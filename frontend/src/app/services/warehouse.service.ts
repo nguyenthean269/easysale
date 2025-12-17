@@ -74,6 +74,7 @@ export class WarehouseService {
     property_group_id?: number;
     property_group_slug?: string;
     unit_type_id?: number;
+    unit_type_slug?: string;
     listing_type?: 'CAN_THUE' | 'CAN_CHO_THUE' | 'CAN_BAN' | 'CAN_MUA' | 'KHAC';
     price_from?: number;
     price_to?: number;
@@ -81,12 +82,13 @@ export class WarehouseService {
     area_to?: number;
   } = {}): Observable<ApartmentsListResponse> {
     const queryParams = new URLSearchParams();
-    
+
     if (params.limit !== undefined) queryParams.set('limit', params.limit.toString());
     if (params.offset !== undefined) queryParams.set('offset', params.offset.toString());
     if (params.property_group_id !== undefined) queryParams.set('property_group_id', params.property_group_id.toString());
     if (params.property_group_slug !== undefined) queryParams.set('property_group_slug', params.property_group_slug);
     if (params.unit_type_id !== undefined) queryParams.set('unit_type_id', params.unit_type_id.toString());
+    if (params.unit_type_slug !== undefined) queryParams.set('unit_type_slug', params.unit_type_slug);
     if (params.listing_type !== undefined) queryParams.set('listing_type', params.listing_type);
     if (params.price_from !== undefined) queryParams.set('price_from', params.price_from.toString());
     if (params.price_to !== undefined) queryParams.set('price_to', params.price_to.toString());
@@ -141,6 +143,13 @@ export class WarehouseService {
     const url = `${this.apiUrl}/property-groups${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
     return this.http.get<PropertyGroupsResponse>(url);
   }
+
+  /**
+   * Lấy danh sách unit types
+   */
+  getUnitTypes(): Observable<UnitTypesResponse> {
+    return this.http.get<UnitTypesResponse>(`${this.apiUrl}/unit-types`);
+  }
 }
 
 export interface PropertyGroup {
@@ -157,6 +166,20 @@ export interface PropertyGroup {
 export interface PropertyGroupsResponse {
   success: boolean;
   data: PropertyGroup[];
+  count: number;
+  error?: string;
+}
+
+export interface UnitType {
+  id: number;
+  name: string;
+  slug?: string;
+  description?: string;
+}
+
+export interface UnitTypesResponse {
+  success: boolean;
+  data: UnitType[];
   count: number;
   error?: string;
 }

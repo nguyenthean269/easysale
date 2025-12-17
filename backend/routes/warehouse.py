@@ -366,6 +366,7 @@ def get_apartments_list():
     - property_group_id: Filter theo property_group_id (optional)
     - property_group_slug: Filter theo property_group slug (optional)
     - unit_type_id: Filter theo unit_type_id (optional)
+    - unit_type_slug: Filter theo unit_type slug (optional)
     - listing_type: Filter theo listing_type (optional): CAN_THUE, CAN_CHO_THUE, CAN_BAN, CAN_MUA, KHAC
     - price_from: Filter giá từ (optional)
     - price_to: Filter giá đến (optional)
@@ -379,6 +380,7 @@ def get_apartments_list():
         property_group_id = request.args.get('property_group_id', type=int)
         property_group_slug = request.args.get('property_group_slug', type=str)
         unit_type_id = request.args.get('unit_type_id', type=int)
+        unit_type_slug = request.args.get('unit_type_slug', type=str)
         listing_type = request.args.get('listing_type', type=str)
         price_from = request.args.get('price_from', type=float)
         price_to = request.args.get('price_to', type=float)
@@ -404,8 +406,8 @@ def get_apartments_list():
                 'error': 'listing_type must be one of: CAN_THUE, CAN_CHO_THUE, CAN_BAN, CAN_MUA, KHAC'
             }), 400
         
-        logger.info(f"Getting apartments list: limit={limit}, offset={offset}, property_group_id={property_group_id}, property_group_slug={property_group_slug}, unit_type_id={unit_type_id}, listing_type={listing_type}, price_from={price_from}, price_to={price_to}, area_from={area_from}, area_to={area_to}")
-        
+        logger.info(f"Getting apartments list: limit={limit}, offset={offset}, property_group_id={property_group_id}, property_group_slug={property_group_slug}, unit_type_id={unit_type_id}, unit_type_slug={unit_type_slug}, listing_type={listing_type}, price_from={price_from}, price_to={price_to}, area_from={area_from}, area_to={area_to}")
+
         # Gọi service method
         result = warehouse_service.get_apartments_list(
             limit=limit,
@@ -413,6 +415,7 @@ def get_apartments_list():
             property_group_id=property_group_id,
             property_group_slug=property_group_slug,
             unit_type_id=unit_type_id,
+            unit_type_slug=unit_type_slug,
             listing_type=listing_type,
             price_from=price_from,
             price_to=price_to,
@@ -560,6 +563,67 @@ def search_apartments():
             
     except Exception as e:
         logger.error(f"Error in search_apartments: {str(e)}")
+        return jsonify({
+            'success': False,
+            'error': str(e)
+        }), 500
+
+@warehouse_bp.route('/api/warehouse/unit-types', methods=['GET'])
+def get_unit_types():
+    """
+    Lấy danh sách unit types
+    """
+    try:
+        connection = get_warehouse_connection()
+        if not connection:
+            return jsonify({
+                'success': False,
+                'error': 'Database connection failed'
+            }), 500
+
+        try:
+            cursor = connection.cursor(pymysql.cursors.DictCursor)
+
+            # Check if slug column exists
+            cursor.execute("SHOW COLUMNS FROM types_unit LIKE 'slug'")
+            has_slug = cursor.fetchone() is not None
+
+            if has_slug:
+                query = """
+                    SELECT id, name, slug
+                    FROM types_unit
+                    ORDER BY name
+                """
+            else:
+                query = """
+                    SELECT id, name
+                    FROM types_unit
+                    ORDER BY name
+                """
+
+            cursor.execute(query)
+            unit_types = cursor.fetchall()
+            cursor.close()
+
+            result = []
+            for unit_type in unit_types:
+                result.append({
+                    'id': unit_type['id'],
+                    'name': unit_type['name'],
+                    'slug': unit_type.get('slug') if has_slug else None
+                })
+
+            return jsonify({
+                'success': True,
+                'data': result,
+                'count': len(result)
+            })
+
+        finally:
+            connection.close()
+
+    except Exception as e:
+        logger.error(f"Error in get_unit_types: {str(e)}")
         return jsonify({
             'success': False,
             'error': str(e)

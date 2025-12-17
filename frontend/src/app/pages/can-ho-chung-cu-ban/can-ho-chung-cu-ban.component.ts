@@ -1,23 +1,21 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
-import { NzTableModule } from 'ng-zorro-antd/table';
 import { NzSpinModule } from 'ng-zorro-antd/spin';
 import { NzCardModule } from 'ng-zorro-antd/card';
-import { NzTagModule } from 'ng-zorro-antd/tag';
-import { NzPaginationModule } from 'ng-zorro-antd/pagination';
 import { NzFormModule } from 'ng-zorro-antd/form';
 import { NzInputModule } from 'ng-zorro-antd/input';
-import { NzInputNumberModule } from 'ng-zorro-antd/input-number';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 import { NzGridModule } from 'ng-zorro-antd/grid';
 import { NzSliderModule } from 'ng-zorro-antd/slider';
 import { NzIconModule } from 'ng-zorro-antd/icon';
 import { FormsModule } from '@angular/forms';
-import { WarehouseService } from '../../services/warehouse.service';
+import { WarehouseService, UnitType } from '../../services/warehouse.service';
 import { ApartmentListingBaseComponent, ApartmentListingConfig } from '../shared/apartment-listing-base.component';
 import { CustomDropdownComponent } from '../shared/custom-dropdown.component';
 import { DanhSachDuAnComponent } from '../shared/danh-sach-du-an/danh-sach-du-an.component';
+import { ApartmentTableComponent, ApartmentTableColumn } from '../../components/apartment-table/apartment-table.component';
+import { NzSelectModule } from 'ng-zorro-antd/select';
 
 @Component({
   selector: 'app-can-ho-chung-cu-ban',
@@ -26,20 +24,18 @@ import { DanhSachDuAnComponent } from '../shared/danh-sach-du-an/danh-sach-du-an
     CommonModule,
     RouterModule,
     FormsModule,
-    NzTableModule,
     NzSpinModule,
     NzCardModule,
-    NzTagModule,
-    NzPaginationModule,
     NzFormModule,
     NzInputModule,
-    NzInputNumberModule,
     NzButtonModule,
     NzGridModule,
     NzSliderModule,
     NzIconModule,
+    NzSelectModule,
     CustomDropdownComponent,
-    DanhSachDuAnComponent
+    DanhSachDuAnComponent,
+    ApartmentTableComponent
   ],
   template: `
   <div class="p-6">
@@ -62,14 +58,16 @@ import { DanhSachDuAnComponent } from '../shared/danh-sach-du-an/danh-sach-du-an
           <form nz-form [nzLayout]="'inline'" class="w-full">
             <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
               <div>
-                <label class="block text-sm font-medium mb-2">Dự án (ID)</label>
-                <input 
-                  nz-input 
-                  [(ngModel)]="filters.duAn"
-                  name="duAn"
-                  placeholder="Nhập ID dự án"
-                  class="w-full"
-                />
+                <label class="block text-sm font-medium mb-2">Loại căn hộ</label>
+                <nz-select
+                  [(ngModel)]="filters.loaiCanHo"
+                  (ngModelChange)="onUnitTypeChange($event)"
+                  name="loaiCanHo"
+                  nzPlaceHolder="Chọn loại căn hộ"
+                  nzAllowClear
+                  class="w-full">
+                  <nz-option *ngFor="let type of unitTypes" [nzValue]="type.id" [nzLabel]="type.name"></nz-option>
+                </nz-select>
               </div>
               <div>
                 <label class="block text-sm font-medium mb-2">Khoảng giá</label>
@@ -143,80 +141,21 @@ import { DanhSachDuAnComponent } from '../shared/danh-sach-du-an/danh-sach-du-an
           </form>
         </nz-card>
         
-        <nz-spin [nzSpinning]="loading">
-          <nz-table 
-            #apartmentsTable 
-            [nzData]="apartments"
-            [nzPageSize]="pageSize"
-            [nzShowSizeChanger]="true"
-            [nzShowQuickJumper]="true"
-            [nzShowTotal]="totalTemplate"
-            [nzPageIndex]="pageIndex"
-            (nzPageIndexChange)="onPageChange($event)"
-            (nzPageSizeChange)="onPageSizeChange($event)">
-            
-            <thead>
-              <tr>
-                <th>ID</th>
-                <th>Mã căn hộ</th>
-                <th>Dự án</th>
-                <th>Loại căn hộ</th>
-                <th>Tầng</th>
-                <th>Diện tích (m²)</th>
-                <th>Phòng ngủ</th>
-                <th>Phòng tắm</th>
-                <th>{{ priceColumnLabel }}</th>
-                <th>Trạng thái</th>
-                <th>Số điện thoại</th>
-              </tr>
-            </thead>
-            <tbody>
-              <tr *ngFor="let apartment of apartmentsTable.data">
-                <td>{{ apartment.id }}</td>
-                <td>
-                  <div class="font-medium">{{ apartment.unit_code || '-' }}</div>
-                  <div class="text-sm text-gray-500">{{ apartment.unit_axis || '-' }}</div>
-                </td>
-                <td>{{ apartment.property_group_name || '-' }}</td>
-                <td>{{ apartment.unit_type_name || '-' }}</td>
-                <td>{{ apartment.unit_floor_number || '-' }}</td>
-                <td>
-                  <div *ngIf="apartment.area_net">Net: {{ apartment.area_net }}</div>
-                  <div *ngIf="apartment.area_gross" class="text-sm text-gray-500">Gross: {{ apartment.area_gross }}</div>
-                </td>
-                <td>{{ apartment.num_bedrooms || '-' }}</td>
-                <td>{{ apartment.num_bathrooms || '-' }}</td>
-                <td>
-                  <ng-container *ngIf="getPriceDisplay(apartment).main">
-                    <div class="font-medium text-blue-600">
-                      {{ formatPrice(getPriceDisplay(apartment).main!) }}
-                    </div>
-                    <div *ngIf="getPriceDisplay(apartment).early" class="text-sm text-gray-500">
-                      Sớm: {{ formatPrice(getPriceDisplay(apartment).early!) }}
-                    </div>
-                  </ng-container>
-                  <div *ngIf="!getPriceDisplay(apartment).main" class="text-gray-400">-</div>
-                </td>
-                <td>
-                  <nz-tag [nzColor]="getStatusColor(apartment.status)">
-                    {{ apartment.status || '-' }}
-                  </nz-tag>
-                </td>
-                <td>{{ apartment.phone_number || '-' }}</td>
-              </tr>
-            </tbody>
-          </nz-table>
-          
-          <!-- Statistics Section -->
-          <div *ngIf="apartments && apartments.length > 0" class="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
-            <h3 class="text-lg font-semibold text-gray-800 mb-3">Thống kê & Phân tích</h3>
-            <p class="text-gray-700 leading-relaxed" [innerHTML]="getStatistics()"></p>
-          </div>
-          
-          <ng-template #totalTemplate let-total>
-            Tổng {{ total }} căn hộ
-          </ng-template>
-        </nz-spin>
+        <app-apartment-table
+          [data]="apartments"
+          [columns]="tableColumns"
+          [loading]="loading"
+          [pagination]="paginationData"
+          [priceField]="config.priceField || 'price'"
+          (pageChange)="onPageChange($event)"
+          (pageSizeChange)="onPageSizeChange($event)">
+        </app-apartment-table>
+
+        <!-- Statistics Section -->
+        <div *ngIf="apartments && apartments.length > 0" class="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
+          <h3 class="text-lg font-semibold text-gray-800 mb-3">Thống kê & Phân tích</h3>
+          <p class="text-gray-700 leading-relaxed" [innerHTML]="getStatistics()"></p>
+        </div>
       </div>
     </div>
   </div>
@@ -241,6 +180,29 @@ export class CanHoChungCuBanComponent extends ApartmentListingBaseComponent {
     priceField: 'price'
   };
 
+  tableColumns: ApartmentTableColumn[] = [
+    { key: 'id', label: 'ID', width: '80px' },
+    { key: 'property_group_name', label: 'Dự án', width: '200px' },
+    { key: 'unit_type_name', label: 'Loại căn hộ', width: '150px' },
+    { key: 'unit_floor_number', label: 'Tầng', width: '80px' },
+    { key: 'area', label: 'Diện tích (m²)', width: '150px' },
+    { key: 'num_bedrooms', label: 'Phòng ngủ', width: '100px' },
+    { key: 'num_bathrooms', label: 'Phòng tắm', width: '100px' },
+    { key: 'price', label: 'Giá bán (VNĐ)', width: '180px' }
+  ];
+
+  unitTypes: UnitType[] = [];
+
+  // Override parsePathParams to map slug to ID after parsing
+  override parsePathParams() {
+    super.parsePathParams();
+    this.mapUnitTypeSlugToId();
+    // Reload apartments after mapping slug to ID
+    if (this.filters.loaiCanHo) {
+      this.loadApartments();
+    }
+  }
+
   get title(): string {
     return this.config.title;
   }
@@ -249,12 +211,64 @@ export class CanHoChungCuBanComponent extends ApartmentListingBaseComponent {
     return 'Giá bán (VNĐ)';
   }
 
+  get paginationData() {
+    return {
+      pageIndex: this.pageIndex,
+      pageSize: this.pageSize,
+      total: this.total
+    };
+  }
+
   constructor(
     warehouseService: WarehouseService,
     route: ActivatedRoute,
     router: Router
   ) {
     super(warehouseService, route, router);
+    this.loadUnitTypes();
+  }
+
+  loadUnitTypes() {
+    this.warehouseService.getUnitTypes().subscribe({
+      next: (response) => {
+        if (response.success) {
+          this.unitTypes = response.data;
+          // If we have a slug from URL, find the matching unit type ID
+          if (this.filters.loaiCanHoSlug && !this.filters.loaiCanHo) {
+            const matchedType = this.unitTypes.find(t => t.slug === this.filters.loaiCanHoSlug);
+            if (matchedType) {
+              this.filters.loaiCanHo = matchedType.id;
+              // Reload apartments with the unit type ID
+              this.loadApartments();
+            }
+          }
+        }
+      },
+      error: (error) => {
+        console.error('Error loading unit types:', error);
+      }
+    });
+  }
+
+  onUnitTypeChange(unitTypeId: number | null) {
+    if (unitTypeId) {
+      const selectedType = this.unitTypes.find(t => t.id === unitTypeId);
+      if (selectedType && selectedType.slug) {
+        this.filters.loaiCanHoSlug = selectedType.slug;
+      }
+    } else {
+      this.filters.loaiCanHoSlug = null;
+    }
+  }
+
+  mapUnitTypeSlugToId() {
+    // If we have a slug and unit types are loaded, map slug to ID
+    if (this.filters.loaiCanHoSlug && this.unitTypes.length > 0) {
+      const matchedType = this.unitTypes.find(t => t.slug === this.filters.loaiCanHoSlug);
+      if (matchedType) {
+        this.filters.loaiCanHo = matchedType.id;
+      }
+    }
   }
 }
 
