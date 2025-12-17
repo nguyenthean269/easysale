@@ -251,14 +251,11 @@ export class CanHoChungCuChoThueComponent extends ApartmentListingBaseComponent 
     }
   }
 
-  // Override parsePathParams to map slug to ID after parsing
-  override parsePathParams() {
-    super.parsePathParams();
+  // Override onRouteChange to handle slug-to-ID mapping before loading apartments
+  protected override onRouteChange() {
+    this.parsePathParams();
     this.mapUnitTypeSlugToId();
-    // Reload apartments after mapping slug to ID
-    if (this.filters.loaiCanHo) {
-      this.loadApartments();
-    }
+    this.loadApartments();
   }
 
   mapUnitTypeSlugToId() {

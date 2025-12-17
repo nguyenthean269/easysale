@@ -128,9 +128,14 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
     this.route.url
       .pipe(takeUntil(this.destroy$))
       .subscribe(() => {
-        this.parsePathParams();
-        this.loadApartments();
+        this.onRouteChange();
       });
+  }
+
+  // Override this method in child components if needed
+  protected onRouteChange() {
+    this.parsePathParams();
+    this.loadApartments();
   }
 
   ngOnDestroy() {
