@@ -229,9 +229,13 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
   applyFilters() {
     const pathParts: string[] = [this.config.routePath];
 
-    if (this.filters.duAn) {
+    // Add dự án (either by slug or ID)
+    if (this.filters.duAnSlug) {
+      pathParts.push(`du-an-${this.filters.duAnSlug}`);
+    } else if (this.filters.duAn) {
       pathParts.push(`du-an-${this.filters.duAn}`);
     }
+
     if (this.filters.loaiCanHoSlug) {
       // Add "can-" prefix to URL, as DB slug doesn't have it
       pathParts.push(`can-${this.filters.loaiCanHoSlug}`);

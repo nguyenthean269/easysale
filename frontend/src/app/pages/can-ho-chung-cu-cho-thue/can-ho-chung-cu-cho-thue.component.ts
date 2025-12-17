@@ -44,21 +44,12 @@ import { NzSelectModule } from 'ng-zorro-antd/select';
         <div class="flex items-center justify-between">
           <h1 class="text-2xl font-semibold text-gray-800">{{ title }}</h1>
         </div>
-        
-        <!-- Danh sách dự án -->
-        <nz-card nzTitle="Danh sách dự án" [nzBordered]="false" class="mb-4">
-          <app-danh-sach-du-an 
-            [routePath]="config.routePath" 
-            [propertyGroupSlug]="filters.duAnSlug || undefined">
-          </app-danh-sach-du-an>
-        </nz-card>
-        
+
         <!-- Filter Form -->
         <nz-card nzTitle="Bộ lọc" [nzBordered]="false" class="mb-4">
           <form nz-form [nzLayout]="'inline'" class="w-full">
-            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-5 gap-4">
+            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
               <div>
-                <label class="block text-sm font-medium mb-2">Loại căn hộ</label>
                 <nz-select
                   [(ngModel)]="filters.loaiCanHo"
                   (ngModelChange)="onUnitTypeChange($event)"
@@ -70,12 +61,11 @@ import { NzSelectModule } from 'ng-zorro-antd/select';
                 </nz-select>
               </div>
               <div>
-                <label class="block text-sm font-medium mb-2">Khoảng giá</label>
                 <app-custom-dropdown [placement]="'bottomLeft'">
                   <button nz-button nzType="default" class="w-full text-left" trigger>
                     <span *ngIf="!filters.giaTu && !filters.giaDen">Chọn khoảng giá</span>
                     <span *ngIf="filters.giaTu || filters.giaDen">
-                      {{ filters.giaTu ? formatPriceLabel(filters.giaTu / 1000000) : formatPriceLabel(priceRangeMin) }} - 
+                      {{ filters.giaTu ? formatPriceLabel(filters.giaTu / 1000000) : formatPriceLabel(priceRangeMin) }} -
                       {{ filters.giaDen ? formatPriceLabel(filters.giaDen / 1000000) : formatPriceLabel(priceRangeMax) }}
                     </span>
                     <span nz-icon nzType="down" class="float-right mt-1"></span>
@@ -100,12 +90,11 @@ import { NzSelectModule } from 'ng-zorro-antd/select';
                 </app-custom-dropdown>
               </div>
               <div>
-                <label class="block text-sm font-medium mb-2">Diện tích</label>
                 <app-custom-dropdown [placement]="'bottomLeft'">
                   <button nz-button nzType="default" class="w-full text-left" trigger>
                     <span *ngIf="!filters.dienTichTu && !filters.dienTichToi">Chọn diện tích</span>
                     <span *ngIf="filters.dienTichTu || filters.dienTichToi">
-                      {{ filters.dienTichTu || areaRangeMin }} m² - 
+                      {{ filters.dienTichTu || areaRangeMin }} m² -
                       {{ filters.dienTichToi || areaRangeMax }} m²
                     </span>
                     <span nz-icon nzType="down" class="float-right mt-1"></span>
@@ -129,14 +118,16 @@ import { NzSelectModule } from 'ng-zorro-antd/select';
                   </div>
                 </app-custom-dropdown>
               </div>
-            </div>
-            <div class="mt-4 flex justify-end gap-2">
-              <button nz-button nzType="default" (click)="resetFilters()">
-                Xóa bộ lọc
-              </button>
-              <button nz-button nzType="primary" (click)="applyFilters()">
-                Lọc
-              </button>
+              <div>
+                <button nz-button nzType="default" (click)="resetFilters()" class="w-full">
+                  Xóa bộ lọc
+                </button>
+              </div>
+              <div>
+                <button nz-button nzType="primary" (click)="applyFilters()" class="w-full">
+                  Lọc
+                </button>
+              </div>
             </div>
           </form>
         </nz-card>
@@ -150,6 +141,14 @@ import { NzSelectModule } from 'ng-zorro-antd/select';
           (pageChange)="onPageChange($event)"
           (pageSizeChange)="onPageSizeChange($event)">
         </app-apartment-table>
+
+        <!-- Danh sách dự án -->
+        <nz-card nzTitle="Danh sách dự án" [nzBordered]="false" class="mb-4">
+          <app-danh-sach-du-an
+            [routePath]="config.routePath"
+            [propertyGroupSlug]="filters.duAnSlug || undefined">
+          </app-danh-sach-du-an>
+        </nz-card>
 
         <!-- Statistics Section -->
         <div *ngIf="apartments && apartments.length > 0" class="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">

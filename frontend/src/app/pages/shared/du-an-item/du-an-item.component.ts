@@ -1,117 +1,55 @@
 import { Component, Input } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterModule } from '@angular/router';
-import { NzCardModule } from 'ng-zorro-antd/card';
 import { PropertyGroup } from '../../../services/warehouse.service';
 
 @Component({
   selector: 'app-du-an-item',
   standalone: true,
-  imports: [CommonModule, NzCardModule, RouterModule],
+  imports: [CommonModule, RouterModule],
   template: `
-    <nz-card [nzHoverable]="true" class="project-item-card">
-      <div class="project-item-content">
-        <div class="project-thumbnail" *ngIf="project.thumbnail">
-          <img [src]="project.thumbnail" [alt]="project.name" />
+    <div class="bg-white rounded-lg border border-gray-200 p-3 mb-3 transition-all duration-300 hover:shadow-md hover:-translate-y-0.5 hover:border-blue-300">
+      <div class="flex gap-3 items-start">
+        <!-- Thumbnail -->
+        <div class="flex-shrink-0 w-24 h-24 rounded-md overflow-hidden bg-gradient-to-br from-gray-50 to-gray-100 flex items-center justify-center group">
+          <img *ngIf="project.thumbnail"
+               [src]="project.thumbnail"
+               [alt]="project.name"
+               class="w-full h-full object-cover transition-transform duration-300 group-hover:scale-105" />
+          <div *ngIf="!project.thumbnail" class="w-full h-full bg-gradient-to-br from-gray-100 to-gray-200 flex items-center justify-center">
+            <svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round" class="text-gray-400 transition-all duration-300 group-hover:text-gray-500 group-hover:scale-110">
+              <rect width="18" height="18" x="3" y="3" rx="2" ry="2"/>
+              <circle cx="9" cy="9" r="2"/>
+              <path d="m21 15-3.086-3.086a2 2 0 0 0-2.828 0L6 21"/>
+            </svg>
+          </div>
         </div>
-        <div class="project-info">
-          <h3 class="project-name">
-            <a *ngIf="project.slug" [routerLink]="getProjectRoute()" class="project-name-link">
+
+        <!-- Content -->
+        <div class="flex-1 min-w-0 flex flex-col gap-1.5">
+          <h3 class="text-base font-semibold text-gray-800 leading-tight line-clamp-2">
+            <a *ngIf="project.slug"
+               [routerLink]="getProjectRoute()"
+               class="hover:text-blue-600 transition-colors duration-200">
               {{ project.name }}
             </a>
             <span *ngIf="!project.slug">{{ project.name }}</span>
           </h3>
-          <p class="project-description" *ngIf="project.description">
+
+          <p *ngIf="project.description"
+             class="text-sm text-gray-600 leading-relaxed line-clamp-2">
             {{ project.description }}
           </p>
-          <div class="project-meta" *ngIf="project.group_type_name">
-            <span class="project-type">{{ project.group_type_name }}</span>
+
+          <div *ngIf="project.group_type_name" class="flex items-center gap-2 mt-1">
+            <span class="inline-flex items-center px-2.5 py-1 bg-gradient-to-r from-blue-50 to-blue-100 text-blue-700 text-xs font-medium rounded border border-blue-200 transition-all duration-200 hover:from-blue-100 hover:to-blue-200 hover:border-blue-300">
+              {{ project.group_type_name }}
+            </span>
           </div>
         </div>
       </div>
-    </nz-card>
-  `,
-  styles: [`
-    .project-item-card {
-      margin-bottom: 16px;
-      border-radius: 8px;
-      transition: all 0.3s;
-    }
-
-    .project-item-card:hover {
-      box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-      transform: translateY(-2px);
-    }
-
-    .project-item-content {
-      display: flex;
-      gap: 16px;
-    }
-
-    .project-thumbnail {
-      flex-shrink: 0;
-      width: 120px;
-      height: 120px;
-      border-radius: 8px;
-      overflow: hidden;
-      background: #f5f5f5;
-    }
-
-    .project-thumbnail img {
-      width: 100%;
-      height: 100%;
-      object-fit: cover;
-    }
-
-    .project-info {
-      flex: 1;
-      display: flex;
-      flex-direction: column;
-      gap: 8px;
-    }
-
-    .project-name {
-      margin: 0;
-      font-size: 18px;
-      font-weight: 600;
-      color: #1a1a1a;
-    }
-
-    .project-name-link {
-      color: #1a1a1a;
-      text-decoration: none;
-      transition: color 0.3s;
-    }
-
-    .project-name-link:hover {
-      color: #1890ff;
-      text-decoration: underline;
-    }
-
-    .project-description {
-      margin: 0;
-      color: #666;
-      font-size: 14px;
-      line-height: 1.5;
-      display: -webkit-box;
-      -webkit-line-clamp: 2;
-      -webkit-box-orient: vertical;
-      overflow: hidden;
-    }
-
-    .project-meta {
-      margin-top: auto;
-    }
-
-    .project-type {
-      display: inline-block;
-      padding: 4px 12px;
-      background: #f0f0f0;
-      border-radius: 4px;
-      font-size: 12px;
-      color: #666;
-    }
-  `]
+    </div>
+  `
 })
 export class DuAnItemComponent {
   @Input() project!: PropertyGroup;
