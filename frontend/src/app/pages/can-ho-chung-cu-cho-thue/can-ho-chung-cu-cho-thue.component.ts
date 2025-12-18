@@ -43,7 +43,7 @@ import { BreadcrumbService } from '../../services/breadcrumb.service';
     <div class="bg-white p-6 rounded-lg shadow-sm">
       <div class="space-y-6">
         <div class="flex items-center justify-between">
-          <h1 class="text-2xl font-semibold text-gray-800">{{ title }}</h1>
+          <h1 class="text-2xl font-semibold text-gray-800">{{ pageTitle }}</h1>
         </div>
 
         <!-- Filter Form -->

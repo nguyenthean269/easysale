@@ -109,6 +109,9 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
   protected propertyGroupName: string | null = null;
   protected unitTypeName: string | null = null;
 
+  // Dynamic page title
+  pageTitle: string = '';
+
   abstract config: ApartmentListingConfig;
 
   constructor(
@@ -119,16 +122,19 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
   ) { }
 
   ngOnInit() {
+    // Initialize page title with config title
+    this.pageTitle = this.config.title;
+
     // Khởi tạo price range dựa trên loại listing
     if (this.config.priceField === 'price_rent') {
       this.priceRangeThue = [5, 100]; // 5 triệu đến 100 triệu/tháng
     } else {
       this.priceRangeBan = [500, 500000]; // 500 triệu đến 500 tỷ
     }
-    
+
     // Khởi tạo area range
     this.areaRange = [30, 200]; // 30 m² đến 200 m²
-    
+
     this.parsePathParams();
     this.loadApartments();
 
@@ -424,16 +430,35 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
       this.warehouseService.getPropertyGroups(undefined, this.filters.duAnSlug).subscribe({
         next: (response) => {
           if (response.success && response.current) {
-            // Add property group with router link
+            // Add all parents first (from root to current)
+            if (response.parents && response.parents.length > 0) {
+              response.parents.forEach(parent => {
+                if (parent.slug) {
+                  const parentPath = `/${this.config.routePath},du-an-${parent.slug}`;
+                  const displayName = this.formatPropertyGroupName(parent);
+                  breadcrumbs.push({
+                    text: displayName,
+                    router: parentPath,
+                    title: displayName
+                  });
+                }
+              });
+            }
+
+            // Add current property group with router link
             const projectPath = `/${this.config.routePath},du-an-${this.filters.duAnSlug}`;
+            const currentDisplayName = this.formatPropertyGroupName(response.current);
             breadcrumbs.push({
-              text: response.current.name,
+              text: currentDisplayName,
               router: projectPath,
-              title: response.current.name
+              title: currentDisplayName
             });
 
+            // Update page title with property group info
+            this.updatePageTitle(response.current);
+
             // Build combined filter text for remaining filters
-            this.addCombinedFiltersBreadcrumb(breadcrumbs);
+            this.addCombinedFiltersBreadcrumb(breadcrumbs, response.current);
           } else {
             this.breadcrumbService.setBreadcrumbs(breadcrumbs);
           }
@@ -454,12 +479,34 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
       });
     } else {
       // No property group, just add combined filters if any
+      this.pageTitle = this.config.title;
       this.addCombinedFiltersBreadcrumb(breadcrumbs);
     }
   }
 
-  private addCombinedFiltersBreadcrumb(breadcrumbs: BreadcrumbItem[]) {
-    const filterParts: string[] = [];
+  private formatPropertyGroupName(group: any): string {
+    if (group.group_type_name) {
+      return `${group.group_type_name} ${group.name}`;
+    }
+    return group.name;
+  }
+
+  private updatePageTitle(propertyGroup?: any) {
+    // Build title: config.title + "tại" + group_type_name + name
+    if (propertyGroup) {
+      const groupText = propertyGroup.group_type_name
+        ? `${propertyGroup.group_type_name} ${propertyGroup.name}`
+        : propertyGroup.name;
+      this.pageTitle = `${this.config.title} tại ${groupText}`;
+    } else {
+      this.pageTitle = this.config.title;
+    }
+    // Filters will be added later in finalizeBreadcrumb if present
+  }
+
+  private addCombinedFiltersBreadcrumb(breadcrumbs: BreadcrumbItem[], propertyGroup?: any) {
+    const unitTypeFilterParts: string[] = [];
+    const priceAreaFilterParts: string[] = [];
 
     // Get unit type name from slug if available
     if (this.filters.loaiCanHoSlug) {
@@ -468,32 +515,32 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
           if (response.success) {
             const unitType = response.data.find(t => t.slug === this.filters.loaiCanHoSlug);
             if (unitType) {
-              filterParts.push(unitType.name);
+              unitTypeFilterParts.push(unitType.name);
             }
 
             // Add price range if available
-            this.addPriceRangeFilter(filterParts);
+            this.addPriceRangeFilter(priceAreaFilterParts);
 
             // Add area range if available
-            this.addAreaRangeFilter(filterParts);
+            this.addAreaRangeFilter(priceAreaFilterParts);
 
             // Combine all filter parts and add to breadcrumb
-            this.finalizeBreadcrumb(breadcrumbs, filterParts);
+            this.finalizeBreadcrumb(breadcrumbs, unitTypeFilterParts, priceAreaFilterParts, propertyGroup);
           }
         },
         error: (error) => {
           console.error('Error loading unit types for breadcrumb:', error);
           // Continue without unit type
-          this.addPriceRangeFilter(filterParts);
-          this.addAreaRangeFilter(filterParts);
-          this.finalizeBreadcrumb(breadcrumbs, filterParts);
+          this.addPriceRangeFilter(priceAreaFilterParts);
+          this.addAreaRangeFilter(priceAreaFilterParts);
+          this.finalizeBreadcrumb(breadcrumbs, unitTypeFilterParts, priceAreaFilterParts, propertyGroup);
         }
       });
     } else {
       // No unit type filter, just add price and area
-      this.addPriceRangeFilter(filterParts);
-      this.addAreaRangeFilter(filterParts);
-      this.finalizeBreadcrumb(breadcrumbs, filterParts);
+      this.addPriceRangeFilter(priceAreaFilterParts);
+      this.addAreaRangeFilter(priceAreaFilterParts);
+      this.finalizeBreadcrumb(breadcrumbs, unitTypeFilterParts, priceAreaFilterParts, propertyGroup);
     }
   }
 
@@ -521,13 +568,53 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
     }
   }
 
-  private finalizeBreadcrumb(breadcrumbs: BreadcrumbItem[], filterParts: string[]) {
-    if (filterParts.length > 0) {
-      const combinedText = filterParts.join(', ');
+  private finalizeBreadcrumb(breadcrumbs: BreadcrumbItem[], unitTypeFilterParts: string[], priceAreaFilterParts: string[], propertyGroup?: any) {
+    // Combine all filters for breadcrumb display
+    const allFilterParts = [...unitTypeFilterParts, ...priceAreaFilterParts];
+
+    if (allFilterParts.length > 0) {
+      const combinedText = allFilterParts.join(', ');
       breadcrumbs.push({
         text: combinedText,
         title: combinedText
       });
+
+      // Update page title with filters
+      if (propertyGroup) {
+        // Title format: Căn hộ + unit type + [bán/cho thuê] + "tại" + property group + price/area
+        const groupText = propertyGroup.group_type_name
+          ? `${propertyGroup.group_type_name} ${propertyGroup.name}`
+          : propertyGroup.name;
+
+        // Extract the action (bán/cho thuê) from config.title
+        const action = this.config.title.includes('cho thuê') ? 'cho thuê' : 'bán';
+
+        // Build title parts
+        let titleParts = ['Căn hộ'];
+
+        // Add unit type filter if exists
+        if (unitTypeFilterParts.length > 0) {
+          titleParts.push(unitTypeFilterParts.join(', '));
+        }
+
+        titleParts.push(action, 'tại', groupText);
+
+        // Add price/area filters after property group
+        if (priceAreaFilterParts.length > 0) {
+          titleParts.push(priceAreaFilterParts.join(', '));
+        }
+
+        this.pageTitle = titleParts.join(' ');
+      } else {
+        // Title format: Căn hộ + all filters + [bán/cho thuê]
+        const action = this.config.title.includes('cho thuê') ? 'cho thuê' : 'bán';
+        this.pageTitle = `Căn hộ ${combinedText} ${action}`;
+      }
+    } else {
+      // No filters, keep title as set by updatePageTitle or config.title
+      if (!propertyGroup) {
+        this.pageTitle = this.config.title;
+      }
     }
 
     this.breadcrumbService.setBreadcrumbs(breadcrumbs);
