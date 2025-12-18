@@ -1,6 +1,8 @@
 import { Component } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { Title, Meta } from '@angular/platform-browser';
+import { takeUntil } from 'rxjs';
 import { NzSpinModule } from 'ng-zorro-antd/spin';
 import { NzCardModule } from 'ng-zorro-antd/card';
 import { NzFormModule } from 'ng-zorro-antd/form';
@@ -177,7 +179,25 @@ export class CanHoChungCuBanComponent extends ApartmentListingBaseComponent {
     routePath: 'can-ho-chung-cu-ban',
     title: 'Căn hộ chung cư bán',
     listingType: 'CAN_BAN',
-    priceField: 'price'
+    priceField: 'price',
+    titleTemplates: {
+      default: 'Căn hộ chung cư bán',
+      withPropertyGroup: 'Căn hộ chung cư bán tại{propertyGroup}',
+      withFilters: 'Căn hộ{unitType}{priceArea} bán',
+      withFiltersAndPropertyGroup: 'Căn hộ{unitType} bán tại{propertyGroup}{priceArea}'
+    },
+    metaTitleTemplates: {
+      default: 'Mua bán căn hộ chung cư giá tốt | EasySale',
+      withPropertyGroup: 'Mua bán căn hộ chung cư tại{propertyGroup} | EasySale',
+      withFilters: 'Căn hộ{unitType}{priceArea} bán | EasySale',
+      withFiltersAndPropertyGroup: 'Căn hộ{unitType} bán tại{propertyGroup}{priceArea} | EasySale'
+    },
+    metaDescriptionTemplates: {
+      default: 'Tìm kiếm và mua bán căn hộ chung cư với giá tốt nhất. Danh sách căn hộ đầy đủ thông tin, cập nhật liên tục.',
+      withPropertyGroup: 'Mua bán căn hộ chung cư tại{propertyGroup}. Thông tin chi tiết, giá cả minh bạch, hỗ trợ tư vấn nhiệt tình.',
+      withFilters: 'Tìm căn hộ{unitType}{priceArea} để mua. Danh sách căn hộ đầy đủ thông tin, giá tốt nhất thị trường.',
+      withFiltersAndPropertyGroup: 'Mua căn hộ{unitType} tại{propertyGroup}{priceArea}. Thông tin chi tiết, giá cả minh bạch, hỗ trợ xem nhà và tư vấn.'
+    }
   };
 
   tableColumns: ApartmentTableColumn[] = [
@@ -192,12 +212,21 @@ export class CanHoChungCuBanComponent extends ApartmentListingBaseComponent {
   ];
 
   unitTypes: UnitType[] = [];
+  private unitTypesLoaded = false;
+  private initialLoadPending = false;
 
   // Override onRouteChange to handle slug-to-ID mapping before loading apartments
   protected override onRouteChange() {
     this.parsePathParams();
-    this.mapUnitTypeSlugToId();
-    this.loadApartments();
+
+    // If unit types are loaded, map slug to ID and load apartments
+    if (this.unitTypesLoaded) {
+      this.mapUnitTypeSlugToId();
+      this.loadApartments();
+    } else {
+      // Mark that we need to load apartments once unit types are ready
+      this.initialLoadPending = true;
+    }
   }
 
   get title(): string {
@@ -220,10 +249,39 @@ export class CanHoChungCuBanComponent extends ApartmentListingBaseComponent {
     warehouseService: WarehouseService,
     route: ActivatedRoute,
     router: Router,
-    breadcrumbService: BreadcrumbService
+    breadcrumbService: BreadcrumbService,
+    titleService: Title,
+    metaService: Meta
   ) {
-    super(warehouseService, route, router, breadcrumbService);
+    super(warehouseService, route, router, breadcrumbService, titleService, metaService);
+  }
+
+  override ngOnInit() {
+    // Initialize page title with config title
+    this.pageTitle = this.config.title;
+
+    // Initialize price range
+    if (this.config.priceField === 'price_rent') {
+      this.priceRangeThue = [5, 100];
+    } else {
+      this.priceRangeBan = [500, 500000];
+    }
+
+    // Initialize area range
+    this.areaRange = [30, 200];
+
+    // Parse path params first
+    this.parsePathParams();
+
+    // Load unit types first, then load apartments in the callback
     this.loadUnitTypes();
+
+    // Subscribe to route changes
+    this.route.url
+      .pipe(takeUntil(this.destroy$))
+      .subscribe(() => {
+        this.onRouteChange();
+      });
   }
 
   loadUnitTypes() {
@@ -231,19 +289,35 @@ export class CanHoChungCuBanComponent extends ApartmentListingBaseComponent {
       next: (response) => {
         if (response.success) {
           this.unitTypes = response.data;
+          this.unitTypesLoaded = true;
+
           // If we have a slug from URL, find the matching unit type ID
           if (this.filters.loaiCanHoSlug && !this.filters.loaiCanHo) {
             const matchedType = this.unitTypes.find(t => t.slug === this.filters.loaiCanHoSlug);
             if (matchedType) {
               this.filters.loaiCanHo = matchedType.id;
-              // Reload apartments with the unit type ID
-              this.loadApartments();
             }
+          }
+
+          // Always load apartments after unit types are loaded (for initial load)
+          // or if there was a pending load from route change
+          if (!this.initialLoadPending) {
+            // This is the initial load from ngOnInit
+            this.loadApartments();
+          } else {
+            // This was triggered by a route change
+            this.initialLoadPending = false;
+            this.loadApartments();
           }
         }
       },
       error: (error) => {
         console.error('Error loading unit types:', error);
+        this.unitTypesLoaded = true;
+
+        // Load apartments anyway even if unit types failed
+        this.loadApartments();
+        this.initialLoadPending = false;
       }
     });
   }

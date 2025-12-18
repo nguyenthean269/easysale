@@ -1,5 +1,6 @@
 import { Directive, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
+import { Title, Meta } from '@angular/platform-browser';
 import { Subject, takeUntil } from 'rxjs';
 import { WarehouseService, Apartment } from '../../services/warehouse.service';
 import { BreadcrumbService } from '../../services/breadcrumb.service';
@@ -10,6 +11,33 @@ export interface ApartmentListingConfig {
   title: string;
   listingType: 'CAN_THUE' | 'CAN_CHO_THUE' | 'CAN_BAN' | 'CAN_MUA' | 'KHAC';
   priceField?: 'price' | 'price_rent'; // Field to use for price filtering
+  titleTemplates: {
+    // Template when no filters and no property group
+    default: string;
+    // Template when no filters but has property group
+    // Placeholders: {propertyGroup}
+    withPropertyGroup: string;
+    // Template when has filters but no property group
+    // Placeholders: {unitType}, {priceArea}
+    withFilters: string;
+    // Template when has filters and property group
+    // Placeholders: {unitType}, {propertyGroup}, {priceArea}
+    withFiltersAndPropertyGroup: string;
+  };
+  metaTitleTemplates: {
+    // HTML <title> tag templates - same placeholders as titleTemplates
+    default: string;
+    withPropertyGroup: string;
+    withFilters: string;
+    withFiltersAndPropertyGroup: string;
+  };
+  metaDescriptionTemplates: {
+    // HTML <meta name="description"> tag templates - same placeholders as titleTemplates
+    default: string;
+    withPropertyGroup: string;
+    withFilters: string;
+    withFiltersAndPropertyGroup: string;
+  };
 }
 
 export interface ApartmentFilters {
@@ -118,7 +146,9 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
     protected warehouseService: WarehouseService,
     protected route: ActivatedRoute,
     protected router: Router,
-    protected breadcrumbService: BreadcrumbService
+    protected breadcrumbService: BreadcrumbService,
+    protected titleService: Title,
+    protected metaService: Meta
   ) { }
 
   ngOnInit() {
@@ -159,6 +189,7 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
   parsePathParams() {
     // Reset filters dựa trên loại listing
     const currentFilters = this.filters;
+
     currentFilters.duAn = null;
     currentFilters.duAnSlug = null;
     currentFilters.loaiCanHo = null;
@@ -430,41 +461,14 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
       this.warehouseService.getPropertyGroups(undefined, this.filters.duAnSlug).subscribe({
         next: (response) => {
           if (response.success && response.current) {
-            // Add all parents first (from root to current)
-            if (response.parents && response.parents.length > 0) {
-              response.parents.forEach(parent => {
-                if (parent.slug) {
-                  const parentPath = `/${this.config.routePath},du-an-${parent.slug}`;
-                  const displayName = this.formatPropertyGroupName(parent);
-                  breadcrumbs.push({
-                    text: displayName,
-                    router: parentPath,
-                    title: displayName
-                  });
-                }
-              });
-            }
-
-            // Add current property group with router link
-            const projectPath = `/${this.config.routePath},du-an-${this.filters.duAnSlug}`;
-            const currentDisplayName = this.formatPropertyGroupName(response.current);
-            breadcrumbs.push({
-              text: currentDisplayName,
-              router: projectPath,
-              title: currentDisplayName
-            });
-
-            // Update page title with property group info
-            this.updatePageTitle(response.current);
-
-            // Build combined filter text for remaining filters
-            this.addCombinedFiltersBreadcrumb(breadcrumbs, response.current);
+            this.buildBreadcrumbsWithPropertyGroup(breadcrumbs, response);
           } else {
             this.breadcrumbService.setBreadcrumbs(breadcrumbs);
           }
         },
         error: (error) => {
           console.error('Error loading property group for breadcrumb:', error);
+
           // Fallback to property group name from apartments
           if (this.propertyGroupName) {
             const projectPath = `/${this.config.routePath},du-an-${this.filters.duAnSlug}`;
@@ -484,6 +488,38 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
     }
   }
 
+  private buildBreadcrumbsWithPropertyGroup(breadcrumbs: BreadcrumbItem[], response: any) {
+    // Add all parents first (from root to current)
+    if (response.parents && response.parents.length > 0) {
+      response.parents.forEach((parent: any) => {
+        if (parent.slug) {
+          const parentPath = `/${this.config.routePath},du-an-${parent.slug}`;
+          const displayName = this.formatPropertyGroupName(parent);
+          breadcrumbs.push({
+            text: displayName,
+            router: parentPath,
+            title: displayName
+          });
+        }
+      });
+    }
+
+    // Add current property group with router link
+    const projectPath = `/${this.config.routePath},du-an-${this.filters.duAnSlug}`;
+    const currentDisplayName = this.formatPropertyGroupName(response.current);
+    breadcrumbs.push({
+      text: currentDisplayName,
+      router: projectPath,
+      title: currentDisplayName
+    });
+
+    // Update page title with property group info
+    this.updatePageTitle(response.current);
+
+    // Build combined filter text for remaining filters
+    this.addCombinedFiltersBreadcrumb(breadcrumbs, response.current);
+  }
+
   private formatPropertyGroupName(group: any): string {
     if (group.group_type_name) {
       return `${group.group_type_name} ${group.name}`;
@@ -492,16 +528,52 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
   }
 
   private updatePageTitle(propertyGroup?: any) {
-    // Build title: config.title + "tại" + group_type_name + name
+    // Build title using template
     if (propertyGroup) {
       const groupText = propertyGroup.group_type_name
         ? `${propertyGroup.group_type_name} ${propertyGroup.name}`
         : propertyGroup.name;
-      this.pageTitle = `${this.config.title} tại ${groupText}`;
+      this.pageTitle = this.applyTitleTemplate(this.config.titleTemplates.withPropertyGroup, {
+        propertyGroup: groupText
+      });
+
+      // Update HTML meta tags
+      this.updateMetaTags(this.config.metaTitleTemplates.withPropertyGroup,
+                         this.config.metaDescriptionTemplates.withPropertyGroup,
+                         { propertyGroup: groupText });
     } else {
-      this.pageTitle = this.config.title;
+      this.pageTitle = this.config.titleTemplates.default;
+      this.updateMetaTags(this.config.metaTitleTemplates.default,
+                         this.config.metaDescriptionTemplates.default,
+                         {});
     }
     // Filters will be added later in finalizeBreadcrumb if present
+  }
+
+  private updateMetaTags(titleTemplate: string, descriptionTemplate: string, placeholders: { [key: string]: string }): void {
+    const metaTitle = this.applyTitleTemplate(titleTemplate, placeholders);
+    const metaDescription = this.applyTitleTemplate(descriptionTemplate, placeholders);
+
+    this.titleService.setTitle(metaTitle);
+    this.metaService.updateTag({ name: 'description', content: metaDescription });
+  }
+
+  private applyTitleTemplate(template: string, placeholders: { [key: string]: string }): string {
+    let result = template;
+
+    // Replace all placeholders with their values, or empty string if not provided
+    const allPlaceholders = ['unitType', 'priceArea', 'propertyGroup'];
+    allPlaceholders.forEach(key => {
+      const value = placeholders[key] || '';
+      // Add space before placeholder if it exists and is not at the start
+      const replacement = value ? ` ${value}` : '';
+      result = result.replace(new RegExp(`\\s*\\{${key}\\}`, 'g'), replacement);
+    });
+
+    // Clean up multiple spaces
+    result = result.replace(/\s+/g, ' ').trim();
+
+    return result;
   }
 
   private addCombinedFiltersBreadcrumb(breadcrumbs: BreadcrumbItem[], propertyGroup?: any) {
@@ -579,41 +651,59 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
         title: combinedText
       });
 
-      // Update page title with filters
+      // Update page title with filters using templates
       if (propertyGroup) {
-        // Title format: Căn hộ + unit type + [bán/cho thuê] + "tại" + property group + price/area
         const groupText = propertyGroup.group_type_name
           ? `${propertyGroup.group_type_name} ${propertyGroup.name}`
           : propertyGroup.name;
 
-        // Extract the action (bán/cho thuê) from config.title
-        const action = this.config.title.includes('cho thuê') ? 'cho thuê' : 'bán';
+        const placeholders: { [key: string]: string } = {
+          propertyGroup: groupText
+        };
 
-        // Build title parts
-        let titleParts = ['Căn hộ'];
-
-        // Add unit type filter if exists
+        // Add unit type if exists
         if (unitTypeFilterParts.length > 0) {
-          titleParts.push(unitTypeFilterParts.join(', '));
+          placeholders['unitType'] = unitTypeFilterParts.join(', ');
         }
 
-        titleParts.push(action, 'tại', groupText);
-
-        // Add price/area filters after property group
+        // Add price/area if exists
         if (priceAreaFilterParts.length > 0) {
-          titleParts.push(priceAreaFilterParts.join(', '));
+          placeholders['priceArea'] = priceAreaFilterParts.join(', ');
         }
 
-        this.pageTitle = titleParts.join(' ');
+        this.pageTitle = this.applyTitleTemplate(this.config.titleTemplates.withFiltersAndPropertyGroup, placeholders);
+
+        // Update HTML meta tags with filters
+        this.updateMetaTags(this.config.metaTitleTemplates.withFiltersAndPropertyGroup,
+                           this.config.metaDescriptionTemplates.withFiltersAndPropertyGroup,
+                           placeholders);
       } else {
-        // Title format: Căn hộ + all filters + [bán/cho thuê]
-        const action = this.config.title.includes('cho thuê') ? 'cho thuê' : 'bán';
-        this.pageTitle = `Căn hộ ${combinedText} ${action}`;
+        const placeholders: { [key: string]: string } = {};
+
+        // Add unit type if exists
+        if (unitTypeFilterParts.length > 0) {
+          placeholders['unitType'] = unitTypeFilterParts.join(', ');
+        }
+
+        // Add price/area if exists
+        if (priceAreaFilterParts.length > 0) {
+          placeholders['priceArea'] = priceAreaFilterParts.join(', ');
+        }
+
+        this.pageTitle = this.applyTitleTemplate(this.config.titleTemplates.withFilters, placeholders);
+
+        // Update HTML meta tags with filters
+        this.updateMetaTags(this.config.metaTitleTemplates.withFilters,
+                           this.config.metaDescriptionTemplates.withFilters,
+                           placeholders);
       }
     } else {
-      // No filters, keep title as set by updatePageTitle or config.title
+      // No filters, keep title as set by updatePageTitle or default
       if (!propertyGroup) {
-        this.pageTitle = this.config.title;
+        this.pageTitle = this.config.titleTemplates.default;
+        this.updateMetaTags(this.config.metaTitleTemplates.default,
+                           this.config.metaDescriptionTemplates.default,
+                           {});
       }
     }
 

@@ -2,6 +2,7 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable } from 'rxjs';
 import { environment } from '../../environments/environment';
+import { ApiCacheService } from './api-cache.service';
 
 export interface Apartment {
   id: number;
@@ -63,7 +64,10 @@ export interface ApartmentByIdsResponse {
 export class WarehouseService {
   private apiUrl = `${environment.apiBaseUrl}/warehouse/api/warehouse`;
 
-  constructor(private http: HttpClient) {}
+  constructor(
+    private http: HttpClient,
+    private cacheService: ApiCacheService
+  ) {}
 
   /**
    * Lấy danh sách apartments với pagination và filters
@@ -141,14 +145,22 @@ export class WarehouseService {
       queryParams.set('slug', slug);
     }
     const url = `${this.apiUrl}/property-groups${queryParams.toString() ? '?' + queryParams.toString() : ''}`;
-    return this.http.get<PropertyGroupsResponse>(url);
+
+    // Create cache key based on params
+    const cacheKey = `property-groups:${parentId || 'root'}:${slug || 'none'}`;
+
+    // Use cache service to prevent duplicate API calls
+    return this.cacheService.get(cacheKey, () => this.http.get<PropertyGroupsResponse>(url));
   }
 
   /**
    * Lấy danh sách unit types
    */
   getUnitTypes(): Observable<UnitTypesResponse> {
-    return this.http.get<UnitTypesResponse>(`${this.apiUrl}/unit-types`);
+    const cacheKey = 'unit-types:all';
+    return this.cacheService.get(cacheKey, () =>
+      this.http.get<UnitTypesResponse>(`${this.apiUrl}/unit-types`)
+    );
   }
 }
 
