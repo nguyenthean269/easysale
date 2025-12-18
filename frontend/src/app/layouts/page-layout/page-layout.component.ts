@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { RouterOutlet, RouterLink, RouterLinkActive, Router } from '@angular/router';
 import { NzLayoutModule } from 'ng-zorro-antd/layout';
@@ -6,6 +6,8 @@ import { NzMenuModule } from 'ng-zorro-antd/menu';
 import { NzButtonModule } from 'ng-zorro-antd/button';
 
 import { AuthService } from '../../services/auth.service';
+import { BreadcrumbComponent, BreadcrumbItem } from '../../shared/breadcrumb/breadcrumb.component';
+import { BreadcrumbService } from '../../services/breadcrumb.service';
 
 @Component({
   selector: 'app-page-layout',
@@ -17,7 +19,8 @@ import { AuthService } from '../../services/auth.service';
     RouterLinkActive,
     NzLayoutModule,
     NzMenuModule,
-    NzButtonModule
+    NzButtonModule,
+    BreadcrumbComponent
   ],
   template: `
     <nz-layout class="min-h-screen">
@@ -97,6 +100,9 @@ import { AuthService } from '../../services/auth.service';
 
       <!-- Content -->
       <div class="max-w-6xl mx-auto flex-1">
+        <div class="px-6">
+          <app-breadcrumb [items]="breadcrumbItems"></app-breadcrumb>
+        </div>
         <router-outlet></router-outlet>
       </div>
 
@@ -121,11 +127,21 @@ import { AuthService } from '../../services/auth.service';
     }
   `]
 })
-export class PageLayoutComponent {
+export class PageLayoutComponent implements OnInit {
+  breadcrumbItems: BreadcrumbItem[] = [];
+
   constructor(
     public authService: AuthService,
-    private router: Router
+    private router: Router,
+    private breadcrumbService: BreadcrumbService
   ) { }
+
+  ngOnInit() {
+    // Subscribe to breadcrumb changes from BreadcrumbService
+    this.breadcrumbService.breadcrumbs$.subscribe(breadcrumbs => {
+      this.breadcrumbItems = breadcrumbs;
+    });
+  }
 
   logout(): void {
     this.authService.logout();

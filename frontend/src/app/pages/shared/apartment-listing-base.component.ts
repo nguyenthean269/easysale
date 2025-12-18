@@ -2,6 +2,8 @@ import { Directive, OnInit, OnDestroy } from '@angular/core';
 import { ActivatedRoute, Router } from '@angular/router';
 import { Subject, takeUntil } from 'rxjs';
 import { WarehouseService, Apartment } from '../../services/warehouse.service';
+import { BreadcrumbService } from '../../services/breadcrumb.service';
+import { BreadcrumbItem } from '../../shared/breadcrumb/breadcrumb.component';
 
 export interface ApartmentListingConfig {
   routePath: string;
@@ -103,12 +105,17 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
 
   protected destroy$ = new Subject<void>();
 
+  // Store property group name for breadcrumb
+  protected propertyGroupName: string | null = null;
+  protected unitTypeName: string | null = null;
+
   abstract config: ApartmentListingConfig;
 
   constructor(
     protected warehouseService: WarehouseService,
     protected route: ActivatedRoute,
-    protected router: Router
+    protected router: Router,
+    protected breadcrumbService: BreadcrumbService
   ) { }
 
   ngOnInit() {
@@ -367,6 +374,19 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
         if (response.success) {
           this.apartments = response.data;
           this.total = response.total;
+
+          // Extract property group name and unit type name from first apartment
+          if (this.apartments.length > 0) {
+            const firstApartment = this.apartments[0];
+            this.propertyGroupName = firstApartment.property_group_name || null;
+            this.unitTypeName = firstApartment.unit_type_name || null;
+          } else {
+            this.propertyGroupName = null;
+            this.unitTypeName = null;
+          }
+
+          // Update breadcrumbs after loading apartments
+          this.updateBreadcrumbs();
         }
         this.loading = false;
       },
@@ -375,6 +395,138 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
         this.loading = false;
       }
     });
+  }
+
+  protected updateBreadcrumbs() {
+    const breadcrumbs: BreadcrumbItem[] = [];
+
+    // Always start with home
+    breadcrumbs.push({
+      text: 'Trang chủ',
+      router: '/',
+      title: 'Về trang chủ'
+    });
+
+    // Add main category (Căn hộ bán / Căn hộ cho thuê)
+    breadcrumbs.push({
+      text: this.config.title,
+      router: `/${this.config.routePath}`,
+      title: this.config.title
+    });
+
+    // Build final breadcrumb based on filters
+    this.buildFilterBreadcrumbs(breadcrumbs);
+  }
+
+  private buildFilterBreadcrumbs(breadcrumbs: BreadcrumbItem[]) {
+    // If we have property group slug, fetch the name from API
+    if (this.filters.duAnSlug) {
+      this.warehouseService.getPropertyGroups(undefined, this.filters.duAnSlug).subscribe({
+        next: (response) => {
+          if (response.success && response.parent) {
+            // Add property group
+            breadcrumbs.push({
+              text: response.parent.name,
+              title: response.parent.name
+            });
+
+            // Build combined filter text for remaining filters
+            this.addCombinedFiltersBreadcrumb(breadcrumbs);
+          } else {
+            this.breadcrumbService.setBreadcrumbs(breadcrumbs);
+          }
+        },
+        error: (error) => {
+          console.error('Error loading property group for breadcrumb:', error);
+          // Fallback to property group name from apartments
+          if (this.propertyGroupName) {
+            breadcrumbs.push({
+              text: this.propertyGroupName,
+              title: this.propertyGroupName
+            });
+          }
+          this.addCombinedFiltersBreadcrumb(breadcrumbs);
+        }
+      });
+    } else {
+      // No property group, just add combined filters if any
+      this.addCombinedFiltersBreadcrumb(breadcrumbs);
+    }
+  }
+
+  private addCombinedFiltersBreadcrumb(breadcrumbs: BreadcrumbItem[]) {
+    const filterParts: string[] = [];
+
+    // Get unit type name from slug if available
+    if (this.filters.loaiCanHoSlug) {
+      this.warehouseService.getUnitTypes().subscribe({
+        next: (response) => {
+          if (response.success) {
+            const unitType = response.data.find(t => t.slug === this.filters.loaiCanHoSlug);
+            if (unitType) {
+              filterParts.push(unitType.name);
+            }
+
+            // Add price range if available
+            this.addPriceRangeFilter(filterParts);
+
+            // Add area range if available
+            this.addAreaRangeFilter(filterParts);
+
+            // Combine all filter parts and add to breadcrumb
+            this.finalizeBreadcrumb(breadcrumbs, filterParts);
+          }
+        },
+        error: (error) => {
+          console.error('Error loading unit types for breadcrumb:', error);
+          // Continue without unit type
+          this.addPriceRangeFilter(filterParts);
+          this.addAreaRangeFilter(filterParts);
+          this.finalizeBreadcrumb(breadcrumbs, filterParts);
+        }
+      });
+    } else {
+      // No unit type filter, just add price and area
+      this.addPriceRangeFilter(filterParts);
+      this.addAreaRangeFilter(filterParts);
+      this.finalizeBreadcrumb(breadcrumbs, filterParts);
+    }
+  }
+
+  private addPriceRangeFilter(filterParts: string[]) {
+    if (this.filters.giaTu && this.filters.giaDen) {
+      const priceFrom = this.formatPriceLabel(this.filters.giaTu / 1000000);
+      const priceTo = this.formatPriceLabel(this.filters.giaDen / 1000000);
+      filterParts.push(`${priceFrom} - ${priceTo}`);
+    } else if (this.filters.giaTu) {
+      const priceFrom = this.formatPriceLabel(this.filters.giaTu / 1000000);
+      filterParts.push(`Từ ${priceFrom}`);
+    } else if (this.filters.giaDen) {
+      const priceTo = this.formatPriceLabel(this.filters.giaDen / 1000000);
+      filterParts.push(`Đến ${priceTo}`);
+    }
+  }
+
+  private addAreaRangeFilter(filterParts: string[]) {
+    if (this.filters.dienTichTu && this.filters.dienTichToi) {
+      filterParts.push(`${this.filters.dienTichTu}m² - ${this.filters.dienTichToi}m²`);
+    } else if (this.filters.dienTichTu) {
+      filterParts.push(`Từ ${this.filters.dienTichTu}m²`);
+    } else if (this.filters.dienTichToi) {
+      filterParts.push(`Đến ${this.filters.dienTichToi}m²`);
+    }
+  }
+
+  private finalizeBreadcrumb(breadcrumbs: BreadcrumbItem[], filterParts: string[]) {
+    if (filterParts.length > 0) {
+      const combinedText = filterParts.join(', ');
+      breadcrumbs.push({
+        text: combinedText,
+        title: combinedText
+      });
+    }
+
+    this.breadcrumbService.setBreadcrumbs(breadcrumbs);
   }
 
   onPageChange(page: number) {

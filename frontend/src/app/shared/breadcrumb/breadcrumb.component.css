@@ -1,0 +1,17 @@
+:host {
+  display: block;
+}
+
+:host ::ng-deep .ant-breadcrumb {
+  font-size: 14px;
+}
+
+:host ::ng-deep .ant-breadcrumb-separator {
+  color: #d1d5db;
+  margin: 0 8px;
+}
+
+:host ::ng-deep .ant-breadcrumb-link {
+  display: inline-flex;
+  align-items: center;
+}

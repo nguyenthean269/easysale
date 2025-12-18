@@ -1,0 +1,19 @@
+<nz-breadcrumb *ngIf="items.length > 0" class="py-4">
+  <nz-breadcrumb-item *ngFor="let item of items; let last = last">
+    <a
+      *ngIf="!last && item.router"
+      [routerLink]="item.router"
+      [title]="item.title || item.text"
+      class="text-gray-600 hover:text-blue-600 transition-colors">
+      {{ item.text }}
+    </a>
+    <span
+      *ngIf="last || !item.router"
+      [title]="item.title || item.text"
+      [class.text-gray-900]="last"
+      [class.font-medium]="last"
+      [class.text-gray-600]="!last">
+      {{ item.text }}
+    </span>
+  </nz-breadcrumb-item>
+</nz-breadcrumb>

@@ -165,6 +165,7 @@ export interface PropertyGroup {
 
 export interface PropertyGroupsResponse {
   success: boolean;
+  parent?: PropertyGroup | null;
   data: PropertyGroup[];
   count: number;
   error?: string;

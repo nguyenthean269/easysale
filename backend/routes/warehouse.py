@@ -654,35 +654,71 @@ def get_property_groups():
             
             # Query property groups với join types_group để lấy type name
             if slug:
-                # Lấy property group theo slug để lấy ID, sau đó lấy children
+                # Lấy property group theo slug
                 query = """
                     SELECT pg.id, pg.name, pg.description, pg.thumbnail, pg.slug,
                            pg.parent_id, pg.group_type, tg.name as group_type_name
-                    FROM property_groups pg 
-                    LEFT JOIN types_group tg ON pg.group_type = tg.id 
+                    FROM property_groups pg
+                    LEFT JOIN types_group tg ON pg.group_type = tg.id
                     WHERE pg.slug = %s
                     ORDER BY pg.name
                     LIMIT 1
                 """
                 cursor.execute(query, (slug,))
                 parent_group = cursor.fetchone()
-                
+
                 if parent_group:
                     # Lấy children của property group này
                     query = """
                         SELECT pg.id, pg.name, pg.description, pg.thumbnail, pg.slug,
                                pg.parent_id, pg.group_type, tg.name as group_type_name
-                        FROM property_groups pg 
-                        LEFT JOIN types_group tg ON pg.group_type = tg.id 
+                        FROM property_groups pg
+                        LEFT JOIN types_group tg ON pg.group_type = tg.id
                         WHERE pg.parent_id = %s
                         ORDER BY pg.name
                     """
                     cursor.execute(query, (parent_group['id'],))
+                    children = cursor.fetchall()
+                    cursor.close()
+
+                    # Convert parent group to dict
+                    parent_result = {
+                        'id': parent_group['id'],
+                        'name': parent_group['name'],
+                        'description': parent_group['description'],
+                        'thumbnail': parent_group['thumbnail'],
+                        'slug': parent_group.get('slug'),
+                        'parent_id': parent_group['parent_id'],
+                        'group_type': parent_group['group_type'],
+                        'group_type_name': parent_group['group_type_name']
+                    }
+
+                    # Convert children to list of dicts
+                    children_result = []
+                    for child in children:
+                        children_result.append({
+                            'id': child['id'],
+                            'name': child['name'],
+                            'description': child['description'],
+                            'thumbnail': child['thumbnail'],
+                            'slug': child.get('slug'),
+                            'parent_id': child['parent_id'],
+                            'group_type': child['group_type'],
+                            'group_type_name': child['group_type_name']
+                        })
+
+                    return jsonify({
+                        'success': True,
+                        'parent': parent_result,
+                        'data': children_result,
+                        'count': len(children_result)
+                    })
                 else:
-                    # Slug not found, return empty
+                    # Slug not found
                     cursor.close()
                     return jsonify({
                         'success': True,
+                        'parent': None,
                         'data': [],
                         'count': 0
                     })

@@ -16,6 +16,7 @@ import { CustomDropdownComponent } from '../shared/custom-dropdown.component';
 import { DanhSachDuAnComponent } from '../shared/danh-sach-du-an/danh-sach-du-an.component';
 import { ApartmentTableComponent, ApartmentTableColumn } from '../../components/apartment-table/apartment-table.component';
 import { NzSelectModule } from 'ng-zorro-antd/select';
+import { BreadcrumbService } from '../../services/breadcrumb.service';
 
 @Component({
   selector: 'app-can-ho-chung-cu-ban',
@@ -218,9 +219,10 @@ export class CanHoChungCuBanComponent extends ApartmentListingBaseComponent {
   constructor(
     warehouseService: WarehouseService,
     route: ActivatedRoute,
-    router: Router
+    router: Router,
+    breadcrumbService: BreadcrumbService
   ) {
-    super(warehouseService, route, router);
+    super(warehouseService, route, router, breadcrumbService);
     this.loadUnitTypes();
   }
 
