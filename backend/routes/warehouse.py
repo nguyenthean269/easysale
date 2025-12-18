@@ -665,9 +665,9 @@ def get_property_groups():
                     LIMIT 1
                 """
                 cursor.execute(query, (slug,))
-                parent_group = cursor.fetchone()
+                current_group = cursor.fetchone()
 
-                if parent_group:
+                if current_group:
                     # Lấy children của property group này
                     query = """
                         SELECT pg.id, pg.name, pg.description, pg.thumbnail, pg.slug,
@@ -677,20 +677,49 @@ def get_property_groups():
                         WHERE pg.parent_id = %s
                         ORDER BY pg.name
                     """
-                    cursor.execute(query, (parent_group['id'],))
+                    cursor.execute(query, (current_group['id'],))
                     children = cursor.fetchall()
+
+                    # Lấy tất cả các cấp cha (parents hierarchy)
+                    parents = []
+                    current_parent_id = current_group['parent_id']
+                    while current_parent_id is not None:
+                        query = """
+                            SELECT pg.id, pg.name, pg.description, pg.thumbnail, pg.slug,
+                                   pg.parent_id, pg.group_type, tg.name as group_type_name
+                            FROM property_groups pg
+                            LEFT JOIN types_group tg ON pg.group_type = tg.id
+                            WHERE pg.id = %s
+                        """
+                        cursor.execute(query, (current_parent_id,))
+                        parent = cursor.fetchone()
+                        if parent:
+                            parents.insert(0, {  # Insert at beginning to maintain order from root to current
+                                'id': parent['id'],
+                                'name': parent['name'],
+                                'description': parent['description'],
+                                'thumbnail': parent['thumbnail'],
+                                'slug': parent.get('slug'),
+                                'parent_id': parent['parent_id'],
+                                'group_type': parent['group_type'],
+                                'group_type_name': parent['group_type_name']
+                            })
+                            current_parent_id = parent['parent_id']
+                        else:
+                            break
+
                     cursor.close()
 
-                    # Convert parent group to dict
-                    parent_result = {
-                        'id': parent_group['id'],
-                        'name': parent_group['name'],
-                        'description': parent_group['description'],
-                        'thumbnail': parent_group['thumbnail'],
-                        'slug': parent_group.get('slug'),
-                        'parent_id': parent_group['parent_id'],
-                        'group_type': parent_group['group_type'],
-                        'group_type_name': parent_group['group_type_name']
+                    # Convert current group to dict
+                    current_result = {
+                        'id': current_group['id'],
+                        'name': current_group['name'],
+                        'description': current_group['description'],
+                        'thumbnail': current_group['thumbnail'],
+                        'slug': current_group.get('slug'),
+                        'parent_id': current_group['parent_id'],
+                        'group_type': current_group['group_type'],
+                        'group_type_name': current_group['group_type_name']
                     }
 
                     # Convert children to list of dicts
@@ -709,7 +738,8 @@ def get_property_groups():
 
                     return jsonify({
                         'success': True,
-                        'parent': parent_result,
+                        'current': current_result,
+                        'parents': parents,
                         'data': children_result,
                         'count': len(children_result)
                     })
@@ -718,7 +748,8 @@ def get_property_groups():
                     cursor.close()
                     return jsonify({
                         'success': True,
-                        'parent': None,
+                        'current': None,
+                        'parents': [],
                         'data': [],
                         'count': 0
                     })

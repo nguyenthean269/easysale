@@ -423,11 +423,13 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
     if (this.filters.duAnSlug) {
       this.warehouseService.getPropertyGroups(undefined, this.filters.duAnSlug).subscribe({
         next: (response) => {
-          if (response.success && response.parent) {
-            // Add property group
+          if (response.success && response.current) {
+            // Add property group with router link
+            const projectPath = `/${this.config.routePath},du-an-${this.filters.duAnSlug}`;
             breadcrumbs.push({
-              text: response.parent.name,
-              title: response.parent.name
+              text: response.current.name,
+              router: projectPath,
+              title: response.current.name
             });
 
             // Build combined filter text for remaining filters
@@ -440,8 +442,10 @@ export abstract class ApartmentListingBaseComponent implements OnInit, OnDestroy
           console.error('Error loading property group for breadcrumb:', error);
           // Fallback to property group name from apartments
           if (this.propertyGroupName) {
+            const projectPath = `/${this.config.routePath},du-an-${this.filters.duAnSlug}`;
             breadcrumbs.push({
               text: this.propertyGroupName,
+              router: projectPath,
               title: this.propertyGroupName
             });
           }
