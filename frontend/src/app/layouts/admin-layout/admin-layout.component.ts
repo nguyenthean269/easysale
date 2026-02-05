@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ViewEncapsulation } from '@angular/core';
 import { RouterOutlet, Router, RouterLink, RouterLinkActive } from '@angular/router';
 import { CommonModule } from '@angular/common';
 import { AuthService } from '../../services/auth.service';
@@ -21,8 +21,11 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
     NzBreadCrumbModule,
     NzButtonModule
   ],
+  encapsulation: ViewEncapsulation.None,
+  styleUrls: ['./admin-layout.component.css'],
   template: `
-    <nz-layout class="min-h-screen">
+    <div class="admin-layout-wrapper">
+      <nz-layout class="min-h-screen">
       <!-- Header -->
       <nz-header class="bg-white border-b border-gray-200 px-6 flex items-center justify-between">
         <div class="flex items-center">
@@ -113,6 +116,7 @@ import { NzButtonModule } from 'ng-zorro-antd/button';
         </nz-layout>
       </nz-layout>
     </nz-layout>
+    </div>
   `,
   styles: [`
     /* Custom styles for admin layout */

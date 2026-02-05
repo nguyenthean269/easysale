@@ -1,0 +1,8 @@
+FROM node
+
+RUN mkdir /app
+# COPY index.html /app/index.html
+COPY dist/ /app/dist/
+WORKDIR /app
+
+CMD node --max-old-space-size=1024 dist/exhome12/server/main

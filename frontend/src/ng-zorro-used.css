@@ -1,0 +1,25 @@
+/* ng-zorro-antd: only CSS for components actually used in the app (no full bundle) */
+@import "ng-zorro-antd/button/style/index.min.css";
+@import "ng-zorro-antd/layout/style/index.min.css";
+@import "ng-zorro-antd/menu/style/index.min.css";
+@import "ng-zorro-antd/icon/style/index.min.css";
+@import "ng-zorro-antd/breadcrumb/style/index.min.css";
+@import "ng-zorro-antd/spin/style/index.min.css";
+@import "ng-zorro-antd/grid/style/index.min.css";
+@import "ng-zorro-antd/form/style/index.min.css";
+@import "ng-zorro-antd/slider/style/index.min.css";
+@import "ng-zorro-antd/tag/style/index.min.css";
+@import "ng-zorro-antd/table/style/index.min.css";
+@import "ng-zorro-antd/card/style/index.min.css";
+@import "ng-zorro-antd/message/style/index.min.css";
+@import "ng-zorro-antd/input/style/index.min.css";
+@import "ng-zorro-antd/select/style/index.min.css";
+@import "ng-zorro-antd/divider/style/index.min.css";
+@import "ng-zorro-antd/pagination/style/index.min.css";
+@import "ng-zorro-antd/space/style/index.min.css";
+@import "ng-zorro-antd/typography/style/index.min.css";
+@import "ng-zorro-antd/tabs/style/index.min.css";
+@import "ng-zorro-antd/modal/style/index.min.css";
+@import "ng-zorro-antd/popconfirm/style/index.min.css";
+@import "ng-zorro-antd/input-number/style/index.min.css";
+@import "ng-zorro-antd/statistic/style/index.min.css";

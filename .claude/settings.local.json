@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ng generate:*)"
+      "Bash(ng generate:*)",
+      "Bash(dir:*)",
+      "Bash(ls:*)",
+      "Bash(npm install:*)",
+      "Bash(npx ng build:*)"
     ]
   }
 }

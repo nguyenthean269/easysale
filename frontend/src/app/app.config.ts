@@ -7,6 +7,7 @@ import { routes } from './app.routes';
 import { AuthInterceptor } from './interceptors/auth.interceptor';
 import { provideNzI18n, vi_VN } from 'ng-zorro-antd/i18n';
 import { NzMessageService } from 'ng-zorro-antd/message';
+import { provideClientHydration, withEventReplay, withHttpTransferCacheOptions } from '@angular/platform-browser';
 
 
 export const appConfig: ApplicationConfig = {
@@ -19,6 +20,9 @@ export const appConfig: ApplicationConfig = {
     {
       provide: 'NzMessageService',
       useClass: NzMessageService
-    }
+    }, provideClientHydration(
+      withEventReplay(),
+      withHttpTransferCacheOptions({ includePostRequests: true })
+    )
   ]
 };

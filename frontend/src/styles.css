@@ -1,15 +1,331 @@
-/* You can add global styles to this file, and also import other style files */
-
-/* Ant Design CSS */
-@import "ng-zorro-antd/ng-zorro-antd.min.css";
-
-/* Ant Design Icons */
 @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap');
+@import url('https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@300;400;500;600;700&display=swap');
+@import "tailwindcss";
 
-/* Custom styles */
-body {
-  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+/* Global Design System - Calm Futuristic */
+:root {
+  /* Brand Colors */
+  --brand: #0db340;
+  --brand-light: #74c858;
+  --brand-dark: #059669;
+  --brand-hover: #0d9488;
+  --brand-glow: rgba(16, 185, 129, 0.35);
+  --brand-soft: rgba(16, 185, 129, 0.12);
+  
+  /* Brand Gradients */
+  --gradient-brand: linear-gradient(135deg, #0db340, #74c858);
+  --gradient-brand-hover: linear-gradient(135deg, #059669, #0db340);
+  --gradient-brand-soft: linear-gradient(135deg, rgba(16, 185, 129, 0.1), rgba(116, 200, 88, 0.05));
+  --gradient-brand-border: linear-gradient(135deg, rgba(16, 185, 129, 0.3), rgba(116, 200, 88, 0.2));
+  
+  /* Dark Theme Colors */
+  --dark-bg: #064e3b;
+  --dark-soft: #065f46;
+  --gradient-dark: linear-gradient(160deg, #064e3b, #065f46);
+  
+  /* Background Colors */
+  --bg: #ffffff;
+  --bg-soft: #f8fafc;
+  --gradient-bg: linear-gradient(to bottom, #ffffff, #f8fafc);
+  --gradient-bg-reverse: linear-gradient(to top, #ffffff, #f8fafc);
+  
+  /* Border Colors */
+  --border: #e5e7eb;
+  --border-light: #f3f4f6;
+  --border-gradient: linear-gradient(135deg, rgba(16, 185, 129, 0.2), rgba(116, 200, 88, 0.1));
+  
+  /* Text Colors */
+  --text-main: #020617;
+  --text-body: #334155;
+  --text-muted: #64748b;
+  --text-on-dark: #e5e7eb;
+  
+  /* Spacing Scale */
+  --spacing-xs: 0.5rem;    /* 8px */
+  --spacing-sm: 0.75rem;   /* 12px */
+  --spacing-md: 1rem;      /* 16px */
+  --spacing-lg: 1.5rem;    /* 24px */
+  --spacing-xl: 2rem;      /* 32px */
+  --spacing-2xl: 2.5rem;   /* 40px */
+  --spacing-3xl: 3rem;     /* 48px */
+  --spacing-4xl: 4rem;     /* 64px */
+  --spacing-5xl: 5rem;     /* 80px */
+  
+  /* Container */
+  --container-max-width: 1200px;
+  --container-padding: 1.75rem; /* 28px */
+  
+  /* Border Radius */
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 18px;
+  --radius-xl: 28px;
+  
+  /* Shadows */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.05);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 20px 60px rgba(16, 185, 129, 0.25);
+  --shadow-xl: 0 40px 80px rgba(2,6,23,.12);
+  --shadow-2xl: 0 40px 90px rgba(2,6,23,.12);
+  
+  /* Transitions */
+  --transition-fast: 0.15s ease;
+  --transition-base: 0.25s ease;
+  --transition-slow: 0.3s ease;
+  
+  /* Typography */
+  --font-family: 'Inter', 'Be Vietnam Pro', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  --font-size-xs: 0.75rem;    /* 12px */
+  --font-size-sm: 0.875rem;   /* 14px */
+  --font-size-base: 0.9375rem; /* 15px */
+  --font-size-md: 1rem;        /* 16px */
+  --font-size-lg: 1.125rem;    /* 18px */
+  --font-size-xl: 1.25rem;     /* 20px */
+  --font-size-2xl: 1.5rem;     /* 24px */
+  --font-size-3xl: 1.75rem;    /* 28px */
+  --font-size-4xl: 2.25rem;    /* 36px */
+  --font-size-5xl: 3rem;       /* 48px */
+  --font-size-6xl: 4rem;       /* 64px */
+  
+  --font-weight-normal: 400;
+  --font-weight-medium: 500;
+  --font-weight-semibold: 600;
+  --font-weight-bold: 700;
+  
+  --line-height-tight: 1.05;
+  --line-height-normal: 1.5;
+  --line-height-relaxed: 1.7;
+  --line-height-loose: 1.8;
+  
+  --letter-spacing-tight: -0.035em;
+  --letter-spacing-normal: -0.02em;
+  --letter-spacing-wide: 0.01em;
 }
+
+/* Base Styles */
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  font-family: var(--font-family);
+  background: var(--bg);
+  color: var(--text-body);
+  line-height: var(--line-height-normal);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Typography */
+h1, h2, h3, h4, h5, h6 {
+  margin: 0;
+  color: var(--text-main);
+  font-weight: var(--font-weight-bold);
+  letter-spacing: var(--letter-spacing-tight);
+  line-height: var(--line-height-tight);
+}
+
+h1 { font-size: var(--font-size-6xl); }
+h2 { font-size: var(--font-size-5xl); }
+h3 { font-size: var(--font-size-3xl); }
+h4 { font-size: var(--font-size-2xl); }
+h5 { font-size: var(--font-size-xl); }
+h6 { font-size: var(--font-size-lg); }
+
+p {
+  margin: 0;
+  color: var(--text-body);
+  line-height: var(--line-height-relaxed);
+}
+
+a {
+  color: var(--brand);
+  text-decoration: none;
+  transition: color var(--transition-base);
+}
+
+a:hover {
+  color: var(--brand-hover);
+}
+
+/* Container */
+.container {
+  max-width: var(--container-max-width);
+  margin: 0 auto;
+  padding: 0 var(--container-padding);
+  width: 100%;
+}
+
+/* Buttons */
+.btn-primary {
+  padding: var(--spacing-md) var(--spacing-2xl);
+  background: var(--gradient-brand);
+  color: #fff;
+  border-radius: var(--radius-lg);
+  text-decoration: none;
+  font-weight: var(--font-weight-semibold);
+  font-size: var(--font-size-base);
+  box-shadow: var(--shadow-lg);
+  transition: all var(--transition-base);
+  display: inline-block;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  overflow: hidden;
+}
+
+.btn-primary::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  padding: 2px;
+  background: var(--gradient-brand);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
+}
+
+.btn-primary::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: var(--gradient-brand-hover);
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  z-index: 0;
+}
+
+.btn-primary:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 28px 80px rgba(16, 185, 129, 0.4);
+}
+
+.btn-primary:hover::after {
+  opacity: 1;
+}
+
+.btn-primary:hover::before {
+  opacity: 1;
+  background: linear-gradient(135deg, #059669, #10b981, #74c858);
+}
+
+.btn-primary > * {
+  position: relative;
+  z-index: 1;
+}
+
+.btn-ghost {
+  padding: var(--spacing-md) var(--spacing-2xl);
+  border-radius: var(--radius-lg);
+  border: 1px solid var(--border);
+  background: rgba(255,255,255,.6);
+  backdrop-filter: blur(8px);
+  color: var(--text-main);
+  font-weight: var(--font-weight-medium);
+  font-size: var(--font-size-base);
+  text-decoration: none;
+  transition: all var(--transition-base);
+  display: inline-block;
+  cursor: pointer;
+  position: relative;
+}
+
+.btn-ghost::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-lg);
+  padding: 2px;
+  background: var(--gradient-brand);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
+}
+
+.btn-ghost:hover {
+  background: rgba(255,255,255,.9);
+  border-color: transparent;
+  color: var(--brand);
+  transform: translateY(-2px);
+  box-shadow: 0 4px 12px rgba(16, 185, 129, 0.15);
+}
+
+.btn-ghost:hover::before {
+  opacity: 1;
+  background: var(--gradient-brand);
+}
+
+/* Cards */
+.card {
+  background: var(--bg);
+  border-radius: var(--radius-xl);
+  padding: var(--spacing-xl);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-xl);
+  transition: all var(--transition-base);
+  position: relative;
+}
+
+.card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: var(--radius-xl);
+  padding: 1px;
+  background: var(--gradient-brand-border);
+  -webkit-mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  opacity: 0;
+  transition: opacity var(--transition-base);
+  pointer-events: none;
+}
+
+.card:hover {
+  transform: translateY(-6px);
+  box-shadow: var(--shadow-2xl);
+  border-color: transparent;
+}
+
+.card:hover::before {
+  opacity: 1;
+}
+
+/* Utility Classes */
+.text-center { text-align: center; }
+.text-left { text-align: left; }
+.text-right { text-align: right; }
+
+.font-medium { font-weight: var(--font-weight-medium); }
+.font-semibold { font-weight: var(--font-weight-semibold); }
+.font-bold { font-weight: var(--font-weight-bold); }
+
+.text-muted { color: var(--text-muted); }
+.text-main { color: var(--text-main); }
+.text-brand { color: var(--brand); }
+
+/* Responsive */
+@media (max-width: 768px) {
+  :root {
+    --container-padding: 1.25rem; /* 20px */
+    --font-size-6xl: 2.625rem;     /* 42px */
+    --font-size-5xl: 2rem;         /* 32px */
+    --font-size-4xl: 1.75rem;      /* 28px */
+  }
+}
+
+/* Note: ng-zorro-antd CSS is now scoped only to AdminLayoutComponent */
+/* It's imported in admin-layout.component.css instead of here */
+
+/* Font imports moved to top of file */
 
 /* Utility classes for spacing and layout */
 .min-h-screen { min-height: 100vh; }
@@ -21,9 +337,6 @@ body {
 .space-x-6 > * + * { margin-left: 1.5rem; }
 .space-y-2 > * + * { margin-top: 0.5rem; }
 .space-y-6 > * + * { margin-top: 1.5rem; }
-.text-center { text-align: center; }
-.text-left { text-align: left; }
-.text-right { text-align: right; }
 
 /* Background colors */
 .bg-white { background-color: white; }
@@ -93,7 +406,7 @@ body {
 
 /* Grid */
 .grid { display: grid; }
-.md\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+[class*="md:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .gap-8 { gap: 2rem; }
 
 /* Shadows */
@@ -103,13 +416,13 @@ body {
 .transition-colors { transition-property: color, background-color, border-color, text-decoration-color, fill, stroke; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
 .transition-shadow { transition-property: box-shadow; transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1); transition-duration: 150ms; }
 
-/* Hover states */
-.hover\\:bg-gray-50:hover { background-color: #f9fafb; }
-.hover\\:bg-blue-700:hover { background-color: #1d4ed8; }
-.hover\\:text-blue-600:hover { color: #2563eb; }
-.hover\\:shadow-lg:hover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
+/* Hover states (attribute selectors to avoid pseudo-class parse errors) */
+[class*="hover:bg-gray-50"]:hover { background-color: #f9fafb; }
+[class*="hover:bg-blue-700"]:hover { background-color: #1d4ed8; }
+[class*="hover:text-blue-600"]:hover { color: #2563eb; }
+[class*="hover:shadow-lg"]:hover { box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -2px rgba(0, 0, 0, 0.05); }
 
 /* Responsive */
 @media (min-width: 768px) {
-  .md\\:grid-cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  [class*="md:grid-cols-3"] { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 }

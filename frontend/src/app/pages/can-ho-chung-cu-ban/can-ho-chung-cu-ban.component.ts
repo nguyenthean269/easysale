@@ -3,22 +3,13 @@ import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { Title, Meta } from '@angular/platform-browser';
 import { takeUntil } from 'rxjs';
-import { NzSpinModule } from 'ng-zorro-antd/spin';
-import { NzCardModule } from 'ng-zorro-antd/card';
-import { NzFormModule } from 'ng-zorro-antd/form';
-import { NzInputModule } from 'ng-zorro-antd/input';
-import { NzButtonModule } from 'ng-zorro-antd/button';
-import { NzGridModule } from 'ng-zorro-antd/grid';
-import { NzSliderModule } from 'ng-zorro-antd/slider';
-import { NzIconModule } from 'ng-zorro-antd/icon';
 import { FormsModule } from '@angular/forms';
 import { WarehouseService, UnitType } from '../../services/warehouse.service';
 import { ApartmentListingBaseComponent, ApartmentListingConfig } from '../shared/apartment-listing-base.component';
-import { CustomDropdownComponent } from '../shared/custom-dropdown.component';
 import { DanhSachDuAnComponent } from '../shared/danh-sach-du-an/danh-sach-du-an.component';
 import { ApartmentTableComponent, ApartmentTableColumn } from '../../components/apartment-table/apartment-table.component';
-import { NzSelectModule } from 'ng-zorro-antd/select';
 import { BreadcrumbService } from '../../services/breadcrumb.service';
+import { ApartmentFilterFormComponent } from '../../components/apartment-filter-form/apartment-filter-form.component';
 
 @Component({
   selector: 'app-can-ho-chung-cu-ban',
@@ -27,113 +18,31 @@ import { BreadcrumbService } from '../../services/breadcrumb.service';
     CommonModule,
     RouterModule,
     FormsModule,
-    NzSpinModule,
-    NzCardModule,
-    NzFormModule,
-    NzInputModule,
-    NzButtonModule,
-    NzGridModule,
-    NzSliderModule,
-    NzIconModule,
-    NzSelectModule,
-    CustomDropdownComponent,
     DanhSachDuAnComponent,
-    ApartmentTableComponent
+    ApartmentTableComponent,
+    ApartmentFilterFormComponent
   ],
   template: `
-  <div class="p-6">
-    <div class="bg-white p-6 rounded-lg shadow-sm">
+  <div class="content-wrapper">
       <div class="space-y-6">
         <div class="flex items-center justify-between">
           <h1 class="text-2xl font-semibold text-gray-800">{{ pageTitle }}</h1>
         </div>
 
         <!-- Filter Form -->
-        <nz-card nzTitle="Bộ lọc" [nzBordered]="false" class="mb-4">
-          <form nz-form [nzLayout]="'inline'" class="w-full">
-            <div class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-5 gap-4">
-              <div>
-                <nz-select
-                  [(ngModel)]="filters.loaiCanHo"
-                  (ngModelChange)="onUnitTypeChange($event)"
-                  name="loaiCanHo"
-                  nzPlaceHolder="Chọn loại căn hộ"
-                  nzAllowClear
-                  class="w-full">
-                  <nz-option *ngFor="let type of unitTypes" [nzValue]="type.id" [nzLabel]="type.name"></nz-option>
-                </nz-select>
-              </div>
-              <div>
-                <app-custom-dropdown [placement]="'bottomLeft'">
-                  <button nz-button nzType="default" class="w-full text-left" trigger>
-                    <span *ngIf="!filters.giaTu && !filters.giaDen">Chọn khoảng giá</span>
-                    <span *ngIf="filters.giaTu || filters.giaDen">
-                      {{ filters.giaTu ? formatPriceLabel(filters.giaTu / 1000000) : formatPriceLabel(priceRangeMin) }} -
-                      {{ filters.giaDen ? formatPriceLabel(filters.giaDen / 1000000) : formatPriceLabel(priceRangeMax) }}
-                    </span>
-                    <span nz-icon nzType="down" class="float-right mt-1"></span>
-                  </button>
-                  <div menu class="p-4" style="width: 320px;">
-                    <div class="mb-4">
-                      <div class="flex justify-between mb-2 text-sm font-medium text-gray-700">
-                        <span>{{ formatPriceLabel((filters.giaTu || priceRangeMin * 1000000) / 1000000) }}</span>
-                        <span>{{ formatPriceLabel((filters.giaDen || priceRangeMax * 1000000) / 1000000) }}</span>
-                      </div>
-                      <nz-slider
-                        nzRange
-                        [nzMin]="priceRangeMin"
-                        [nzMax]="priceRangeMax"
-                        [nzStep]="priceRangeStep"
-                        [(ngModel)]="priceRange"
-                        (ngModelChange)="onPriceRangeChange($event)"
-                        name="priceRange">
-                      </nz-slider>
-                    </div>
-                  </div>
-                </app-custom-dropdown>
-              </div>
-              <div>
-                <app-custom-dropdown [placement]="'bottomLeft'">
-                  <button nz-button nzType="default" class="w-full text-left" trigger>
-                    <span *ngIf="!filters.dienTichTu && !filters.dienTichToi">Chọn diện tích</span>
-                    <span *ngIf="filters.dienTichTu || filters.dienTichToi">
-                      {{ filters.dienTichTu || areaRangeMin }} m² -
-                      {{ filters.dienTichToi || areaRangeMax }} m²
-                    </span>
-                    <span nz-icon nzType="down" class="float-right mt-1"></span>
-                  </button>
-                  <div menu class="p-4" style="width: 320px;">
-                    <div class="mb-4">
-                      <div class="flex justify-between mb-2 text-sm font-medium text-gray-700">
-                        <span>{{ filters.dienTichTu || areaRangeMin }} m²</span>
-                        <span>{{ filters.dienTichToi || areaRangeMax }} m²</span>
-                      </div>
-                      <nz-slider
-                        nzRange
-                        [nzMin]="areaRangeMin"
-                        [nzMax]="areaRangeMax"
-                        [nzStep]="areaRangeStep"
-                        [(ngModel)]="areaRange"
-                        (ngModelChange)="onAreaRangeChange($event)"
-                        name="areaRange">
-                      </nz-slider>
-                    </div>
-                  </div>
-                </app-custom-dropdown>
-              </div>
-              <div>
-                <button nz-button nzType="default" (click)="resetFilters()" class="w-full">
-                  Xóa bộ lọc
-                </button>
-              </div>
-              <div>
-                <button nz-button nzType="primary" (click)="applyFilters()" class="w-full">
-                  Lọc
-                </button>
-              </div>
-            </div>
-          </form>
-        </nz-card>
+        <app-apartment-filter-form
+          [unitTypes]="unitTypes"
+          [filters]="filters"
+          [priceRangeMin]="priceRangeMin"
+          [priceRangeMax]="priceRangeMax"
+          [priceRangeStep]="priceRangeStep"
+          [areaRangeMin]="areaRangeMin"
+          [areaRangeMax]="areaRangeMax"
+          [areaRangeStep]="areaRangeStep"
+          (unitTypeChange)="onUnitTypeChange($event)"
+          (applyFilters)="applyFilters()"
+          (resetFilters)="resetFilters()">
+        </app-apartment-filter-form>
         
         <app-apartment-table
           [data]="apartments"
@@ -146,12 +55,13 @@ import { BreadcrumbService } from '../../services/breadcrumb.service';
         </app-apartment-table>
 
         <!-- Danh sách dự án -->
-        <nz-card nzTitle="Danh sách dự án" [nzBordered]="false" class="mb-4">
+        <div class="card mb-4">
+          <h3 class="card-title">Danh sách dự án</h3>
           <app-danh-sach-du-an
             [routePath]="config.routePath"
             [propertyGroupSlug]="filters.duAnSlug || undefined">
           </app-danh-sach-du-an>
-        </nz-card>
+        </div>
 
         <!-- Statistics Section -->
         <div *ngIf="apartments && apartments.length > 0" class="mt-6 p-4 bg-blue-50 rounded-lg border border-blue-200">
@@ -159,18 +69,30 @@ import { BreadcrumbService } from '../../services/breadcrumb.service';
           <p class="text-gray-700 leading-relaxed" [innerHTML]="getStatistics()"></p>
         </div>
       </div>
-    </div>
   </div>
   `,
   styles: [`
-    :host ::ng-deep .ant-table {
-      border-radius: 8px;
-      overflow: hidden;
+    .content-wrapper {
+      width: 100%;
     }
-    
-    :host ::ng-deep .ant-table-thead > tr > th {
-      background: #fafafa;
+
+    .space-y-6 > * + * {
+      margin-top: 1.5rem;
+    }
+
+    .card {
+      background: #ffffff;
+      border-radius: 8px;
+      padding: 24px;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+    }
+
+    .card-title {
+      font-size: 16px;
       font-weight: 600;
+      color: #111827;
+      margin: 0 0 16px 0;
     }
   `]
 })
@@ -323,10 +245,13 @@ export class CanHoChungCuBanComponent extends ApartmentListingBaseComponent {
   }
 
   onUnitTypeChange(unitTypeId: number | null) {
-    if (unitTypeId) {
+    if (unitTypeId != null) {
       const selectedType = this.unitTypes.find(t => t.id === unitTypeId);
-      if (selectedType && selectedType.slug) {
-        this.filters.loaiCanHoSlug = selectedType.slug;
+      if (selectedType) {
+        // Dùng slug nếu có, không thì dùng id-{id} để URL vẫn lưu được và parse lại
+        this.filters.loaiCanHoSlug = selectedType.slug ?? `id-${unitTypeId}`;
+      } else {
+        this.filters.loaiCanHoSlug = `id-${unitTypeId}`;
       }
     } else {
       this.filters.loaiCanHoSlug = null;

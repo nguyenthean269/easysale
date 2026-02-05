@@ -40,19 +40,56 @@ export type DropdownPlacement = 'bottomLeft' | 'bottomRight' | 'topLeft' | 'topR
       cursor: pointer;
       user-select: none;
       width: 100%;
+      position: relative;
+      display: flex;
+      align-items: center;
+      background: #ffffff;
+      border: 1px solid #e0e0e0;
+      border-radius: 8px;
+      padding: 0 12px;
+      min-height: 40px;
+      transition: border-color 0.2s, box-shadow 0.2s;
+    }
+
+    .custom-dropdown:hover .custom-dropdown-trigger {
+      border-color: #d0d0d0;
+    }
+
+    .custom-dropdown.open .custom-dropdown-trigger {
+      border-color: #d0d0d0;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
     }
 
     .custom-dropdown-trigger.active {
-      /* Add active state styles if needed */
+      border-color: #d0d0d0;
+      box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.06);
+    }
+
+    /* Nội dung trigger (button) bên trong dùng style của wrapper */
+    :host ::ng-deep .custom-dropdown-trigger > * {
+      border: none !important;
+      background: transparent !important;
+      box-shadow: none !important;
+      min-height: 38px;
+      padding: 0 0 0 0 !important;
+      width: 100%;
+      display: flex !important;
+      align-items: center;
+      justify-content: space-between;
+      text-align: left;
+      font-size: 14px;
+      color: #333333;
+      cursor: pointer;
+      outline: none;
     }
 
     .custom-dropdown-menu {
       position: absolute;
       z-index: 1000;
-      background: white;
-      border: 1px solid #d9d9d9;
-      border-radius: 6px;
-      box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+      background: #ffffff;
+      border: 1px solid #e8e8e8;
+      border-radius: 8px;
+      box-shadow: 0 4px 16px rgba(0, 0, 0, 0.12);
       margin-top: 4px;
       min-width: 100%;
     }

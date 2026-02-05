@@ -1,0 +1,7 @@
+/* ng-zorro-antd CSS is loaded globally via angular.json to avoid component style budget (8kB).
+   All ng-zorro components in admin area are within .admin-layout-wrapper */
+
+.admin-layout-wrapper {
+  /* All ng-zorro components should be within this wrapper */
+}
+

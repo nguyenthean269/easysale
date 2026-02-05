@@ -23,50 +23,50 @@ export interface PaginationData {
   template: `
     <div class="w-full">
       <nz-spin [nzSpinning]="loading">
-        <div class="overflow-x-auto rounded-lg border border-gray-200 shadow-sm">
-          <table class="min-w-full divide-y divide-gray-200">
+        <div class="overflow-x-auto rounded-lg border border-gray-200">
+          <table class="min-w-full">
             <thead class="bg-gray-50">
               <tr>
                 <th *ngFor="let column of columns"
                     [style.width]="column.width"
-                    class="px-6 py-3 text-left text-xs font-semibold text-gray-700 uppercase tracking-wider">
+                    class="px-4 py-3 text-left text-xs font-medium text-gray-600 uppercase tracking-wide">
                   {{ column.label }}
                 </th>
               </tr>
             </thead>
-            <tbody class="bg-white divide-y divide-gray-200">
+            <tbody class="bg-white divide-y divide-gray-100">
               <tr *ngFor="let apartment of data"
-                  class="hover:bg-gray-50 transition-colors duration-150">
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  class="hover:bg-gray-50 transition-colors">
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                   {{ apartment.id }}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td class="px-4 py-3 whitespace-nowrap text-sm font-medium text-gray-900">
                   {{ apartment.property_group_name || '-' }}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                   {{ apartment.unit_type_name || '-' }}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                   {{ apartment.unit_floor_number || '-' }}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <div *ngIf="apartment.area_net" class="text-sm text-gray-900">{{ apartment.area_net }} m²</div>
-                  <div *ngIf="apartment.area_gross" class="text-sm text-gray-900">{{ apartment.area_gross }} m²</div>
+                <td class="px-4 py-3 whitespace-nowrap">
+                  <div *ngIf="apartment.area_net" class="text-sm text-gray-700">{{ apartment.area_net }} m²</div>
+                  <div *ngIf="apartment.area_gross" class="text-sm text-gray-700">{{ apartment.area_gross }} m²</div>
                   <div *ngIf="!apartment.area_net && !apartment.area_gross" class="text-sm text-gray-400">-</div>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                   {{ apartment.num_bedrooms || '-' }}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                <td class="px-4 py-3 whitespace-nowrap text-sm text-gray-700">
                   {{ apartment.num_bathrooms || '-' }}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap">
+                <td class="px-4 py-3 whitespace-nowrap">
                   <ng-container *ngIf="getPriceDisplay(apartment).main">
-                    <div class="text-sm font-medium text-blue-600">
+                    <div class="text-sm font-semibold text-green-600">
                       {{ formatPrice(getPriceDisplay(apartment).main!) }}
                     </div>
                     <div *ngIf="getPriceDisplay(apartment).early" class="text-xs text-gray-500">
-                      Sớm: {{ formatPrice(getPriceDisplay(apartment).early!) }}
+                      {{ formatPrice(getPriceDisplay(apartment).early!) }}
                     </div>
                   </ng-container>
                   <div *ngIf="!getPriceDisplay(apartment).main" class="text-sm text-gray-400">-</div>
@@ -75,12 +75,12 @@ export interface PaginationData {
 
               <!-- Empty state -->
               <tr *ngIf="!data || data.length === 0">
-                <td [attr.colspan]="columns.length" class="px-6 py-12 text-center">
+                <td [attr.colspan]="columns.length" class="px-4 py-8 text-center">
                   <div class="text-gray-400">
-                    <svg class="mx-auto h-12 w-12 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <svg class="mx-auto h-10 w-10 text-gray-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 13V6a2 2 0 00-2-2H6a2 2 0 00-2 2v7m16 0v5a2 2 0 01-2 2H6a2 2 0 01-2-2v-5m16 0h-2.586a1 1 0 00-.707.293l-2.414 2.414a1 1 0 01-.707.293h-3.172a1 1 0 01-.707-.293l-2.414-2.414A1 1 0 006.586 13H4" />
                     </svg>
-                    <p class="mt-2 text-sm font-medium">Không có dữ liệu</p>
+                    <p class="mt-2 text-sm">Không có dữ liệu</p>
                   </div>
                 </td>
               </tr>
@@ -90,18 +90,18 @@ export interface PaginationData {
 
         <!-- Pagination -->
         <div *ngIf="pagination && data && data.length > 0"
-             class="mt-4 flex items-center justify-between px-4 py-3 bg-white rounded-lg border border-gray-200">
-          <div class="flex items-center gap-4">
-            <span class="text-sm text-gray-700">
-              Tổng <span class="font-medium">{{ pagination.total }}</span> căn hộ
+             class="mt-3 flex items-center justify-between px-3 py-2 bg-gray-50 rounded-lg">
+          <div class="flex items-center gap-3">
+            <span class="text-sm text-gray-600">
+              Tổng <span class="font-medium text-gray-900">{{ pagination.total }}</span>
             </span>
 
             <div class="flex items-center gap-2">
-              <label class="text-sm text-gray-700">Hiển thị:</label>
+              <span class="text-sm text-gray-600">Hiển thị:</span>
               <select
                 [value]="pagination.pageSize"
                 (change)="onPageSizeChange($event)"
-                class="rounded-md border-gray-300 text-sm focus:border-blue-500 focus:ring-blue-500">
+                class="rounded-md border-gray-300 py-1 px-2 text-sm focus:border-green-500 focus:ring-green-500">
                 <option [value]="10">10</option>
                 <option [value]="20">20</option>
                 <option [value]="50">50</option>
@@ -110,11 +110,11 @@ export interface PaginationData {
             </div>
           </div>
 
-          <div class="flex items-center gap-2">
+          <div class="flex items-center gap-1">
             <button
               (click)="onPageChange(pagination.pageIndex - 1)"
               [disabled]="pagination.pageIndex === 1"
-              class="px-3 py-1 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              class="px-3 py-1 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               Trước
             </button>
 
@@ -123,21 +123,22 @@ export interface PaginationData {
                 <button
                   *ngIf="page !== '...'"
                   (click)="onPageChange(+page)"
-                  [class.bg-blue-600]="page === pagination.pageIndex"
+                  [class.bg-green-600]="page === pagination.pageIndex"
                   [class.text-white]="page === pagination.pageIndex"
                   [class.bg-white]="page !== pagination.pageIndex"
                   [class.text-gray-700]="page !== pagination.pageIndex"
-                  class="px-3 py-1 text-sm font-medium rounded-md border border-gray-300 hover:bg-gray-50 transition-colors">
+                  [class.hover:bg-gray-50]="page !== pagination.pageIndex"
+                  class="px-3 py-1 text-sm font-medium rounded-md border border-gray-300 transition-colors">
                   {{ page }}
                 </button>
-                <span *ngIf="page === '...'" class="px-2 text-gray-500">...</span>
+                <span *ngIf="page === '...'" class="px-1 text-gray-400">...</span>
               </ng-container>
             </div>
 
             <button
               (click)="onPageChange(pagination.pageIndex + 1)"
               [disabled]="pagination.pageIndex >= Math.ceil(pagination.total / pagination.pageSize)"
-              class="px-3 py-1 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+              class="px-3 py-1 text-sm font-medium rounded-md border border-gray-300 bg-white text-gray-700 hover:bg-gray-50 disabled:opacity-40 disabled:cursor-not-allowed transition-colors">
               Sau
             </button>
           </div>
