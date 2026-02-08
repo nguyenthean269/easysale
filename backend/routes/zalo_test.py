@@ -101,6 +101,14 @@ def get_messages():
         limit = request.args.get('limit', 20, type=int)
         offset = request.args.get('offset', 0, type=int)
         warehouse_id = request.args.get('warehouse_id', 'NULL', type=str)
+        sort = request.args.get('sort', 'newest', type=str)
+        
+        # Validate sort parameter
+        if sort not in ('newest', 'oldest'):
+            return jsonify({
+                'success': False,
+                'error': "Invalid sort. Must be 'newest' or 'oldest'"
+            }), 400
         
         # Validate warehouse_id parameter
         valid_warehouse_ids = ['NULL', 'NOT_NULL', 'ALL']
@@ -123,7 +131,7 @@ def get_messages():
                 'error': 'offset must be >= 0'
             }), 400
         
-        result = zalo_processor.get_unprocessed_messages(limit=limit, offset=offset, warehouse_id=warehouse_id)
+        result = zalo_processor.get_unprocessed_messages(limit=limit, offset=offset, warehouse_id=warehouse_id, sort=sort)
         
         # result is now a dict with 'messages' and 'total'
         messages = result.get('messages', [])
@@ -136,7 +144,8 @@ def get_messages():
             'total': total_count,
             'limit': limit,
             'offset': offset,
-            'warehouse_id_filter': warehouse_id
+            'warehouse_id_filter': warehouse_id,
+            'sort': sort
         })
         
     except Exception as e:

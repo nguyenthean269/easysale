@@ -26,7 +26,7 @@ export interface UnprocessedMessage {
   thread_type?: string;
   received_at: string;
   status_push_kafka: number;
-  warehouse_id?: number;
+  warehouse_ids?: number[];
   reply_quote?: string;
   content_hash?: string;
   added_document_chunks?: boolean;
@@ -69,10 +69,11 @@ export class ZaloTestService {
   }
 
   /**
-   * Lấy danh sách messages unique theo content_hash với pagination và filter warehouse_id
+   * Lấy danh sách messages unique theo content_hash với pagination, filter warehouse_id và sort theo thời gian
+   * @param sort 'newest' = mới nhất trước, 'oldest' = cũ nhất trước
    */
-  getMessages(limit: number = 20, offset: number = 0, warehouse_id: string = 'NULL'): Observable<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; total: number; limit: number; offset: number; warehouse_id_filter: string }> {
-    return this.http.get<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; total: number; limit: number; offset: number; warehouse_id_filter: string }>(`${this.apiUrl}/messages?limit=${limit}&offset=${offset}&warehouse_id=${warehouse_id}`);
+  getMessages(limit: number = 20, offset: number = 0, warehouse_id: string = 'NULL', sort: 'newest' | 'oldest' = 'newest'): Observable<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; total: number; limit: number; offset: number; warehouse_id_filter: string; sort: string }> {
+    return this.http.get<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; total: number; limit: number; offset: number; warehouse_id_filter: string; sort: string }>(`${this.apiUrl}/messages?limit=${limit}&offset=${offset}&warehouse_id=${warehouse_id}&sort=${sort}`);
   }
 
   /**

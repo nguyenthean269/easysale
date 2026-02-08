@@ -33,6 +33,10 @@ export interface Apartment {
   unit_allocation: string;
   listing_type?: 'CAN_THUE' | 'CAN_CHO_THUE' | 'CAN_BAN' | 'CAN_MUA' | 'KHAC';
   phone_number?: string;
+  furnished_status?: string;
+  floor_level_category?: string;
+  move_in_ready?: boolean;
+  includes_transfer_fees?: boolean;
 }
 
 export interface ApartmentsListResponse {
@@ -115,6 +119,25 @@ export class WarehouseService {
    */
   getApartmentById(id: number): Observable<{ success: boolean; data: Apartment; error?: string }> {
     return this.http.get<{ success: boolean; data: Apartment; error?: string }>(`${this.apiUrl}/apartments/${id}`);
+  }
+
+  /**
+   * Cập nhật data_status của apartment (REVIEWING | PENDING | APPROVED)
+   */
+  updateApartmentDataStatus(apartmentId: number, dataStatus: 'REVIEWING' | 'PENDING' | 'APPROVED'): Observable<{ success: boolean; apartment_id?: number; data_status?: string; error?: string }> {
+    return this.http.patch<{ success: boolean; apartment_id?: number; data_status?: string; error?: string }>(
+      `${this.apiUrl}/apartments/${apartmentId}/data-status`,
+      { data_status: dataStatus }
+    );
+  }
+
+  /**
+   * Xóa apartment khỏi warehouse
+   */
+  deleteApartment(apartmentId: number): Observable<{ success: boolean; apartment_id?: number; error?: string }> {
+    return this.http.delete<{ success: boolean; apartment_id?: number; error?: string }>(
+      `${this.apiUrl}/apartments/${apartmentId}`
+    );
   }
 
   /**

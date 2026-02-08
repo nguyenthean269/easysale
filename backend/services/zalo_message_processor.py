@@ -104,7 +104,7 @@ class ZaloMessageProcessor:
         """Tạo kết nối database warehouse với retry mechanism"""
         return self.warehouse_service.get_warehouse_db_connection()
     
-    def get_unprocessed_messages(self, limit: int = 20, offset: int = 0, warehouse_id: str = 'NULL') -> List[Dict]:
+    def get_unprocessed_messages(self, limit: int = 20, offset: int = 0, warehouse_id: str = 'NULL', sort: str = 'newest') -> List[Dict]:
         """
         Lấy danh sách tin nhắn từ bảng zalo_received_messages trong database easychat theo warehouse_id
         
@@ -112,6 +112,7 @@ class ZaloMessageProcessor:
             limit: Số lượng tin nhắn tối đa cần lấy
             offset: Số lượng tin nhắn bỏ qua (cho pagination)
             warehouse_id: Trạng thái warehouse_id ('NULL', 'NOT_NULL', 'ALL')
+            sort: Sắp xếp theo thời gian - 'newest' (mới nhất trước) hoặc 'oldest' (cũ nhất trước)
             
         Returns:
             List các tin nhắn theo warehouse_id
@@ -135,21 +136,24 @@ class ZaloMessageProcessor:
                         logger.info("📊 Executing query to fetch messages...")
                         from sqlalchemy import text
                         
-                        # Xây dựng WHERE clause dựa trên warehouse_id
+                        # Xây dựng WHERE clause dựa trên warehouse_ids (JSON set)
                         # Luôn thêm điều kiện content_hash IS NOT NULL để chỉ lấy messages unique
                         if warehouse_id == 'ALL':
                             where_clause = "WHERE content_hash IS NOT NULL"
                             params = {"limit": limit, "offset": offset}
                         elif warehouse_id == 'NULL':
-                            where_clause = "WHERE warehouse_id IS NULL AND content_hash IS NOT NULL"
+                            where_clause = "WHERE (warehouse_ids IS NULL OR JSON_LENGTH(warehouse_ids) = 0) AND content_hash IS NOT NULL"
                             params = {"limit": limit, "offset": offset}
                         elif warehouse_id == 'NOT_NULL':
-                            where_clause = "WHERE warehouse_id IS NOT NULL AND content_hash IS NOT NULL"
+                            where_clause = "WHERE warehouse_ids IS NOT NULL AND JSON_LENGTH(warehouse_ids) > 0 AND content_hash IS NOT NULL"
                             params = {"limit": limit, "offset": offset}
                         else:
-                            # Nếu warehouse_id là một số cụ thể
-                            where_clause = "WHERE warehouse_id = :warehouse_id AND content_hash IS NOT NULL"
-                            params = {"limit": limit, "offset": offset, "warehouse_id": warehouse_id}
+                            # Nếu warehouse_id là một số cụ thể: message chứa id này trong set
+                            where_clause = "WHERE JSON_CONTAINS(warehouse_ids, CAST(:warehouse_id AS JSON), '$') AND content_hash IS NOT NULL"
+                            params = {"limit": limit, "offset": offset, "warehouse_id": int(warehouse_id)}
+                        
+                        # Sắp xếp theo thời gian: newest = DESC, oldest = ASC
+                        order_dir = "DESC" if (sort or "newest").lower() == "newest" else "ASC"
                         
                         # Query để đếm tổng số records (unique content_hash)
                         # Chỉ đếm các content_hash unique, không trùng lặp
@@ -164,7 +168,7 @@ class ZaloMessageProcessor:
                         data_query = text(f"""
                         SELECT z.id, z.session_id, z.config_id, z.sender_id, z.sender_name, 
                                z.content, z.thread_id, z.thread_type, z.received_at, 
-                               z.status_push_kafka, z.warehouse_id, z.reply_quote,
+                               z.status_push_kafka, z.warehouse_ids, z.reply_quote,
                                z.content_hash, z.added_document_chunks
                         FROM zalo_received_messages z
                         INNER JOIN (
@@ -172,10 +176,10 @@ class ZaloMessageProcessor:
                             FROM zalo_received_messages
                             {where_clause}
                             GROUP BY content_hash
-                            ORDER BY MIN(received_at) ASC
+                            ORDER BY MIN(received_at) {order_dir}
                             LIMIT :limit OFFSET :offset
                         ) unique_hashes ON z.content_hash = unique_hashes.content_hash AND z.id = unique_hashes.min_id
-                        ORDER BY z.received_at ASC
+                        ORDER BY z.received_at {order_dir}
                         """)
                         
                         logger.info(f"🔍 Data Query: {data_query}")
@@ -270,15 +274,15 @@ class ZaloMessageProcessor:
       }},
       "unit_code": {{
         "type": ["string", "null"],
-        "description": "Mã căn hộ nếu có. Mã căn hộ thường được ghép từ số tầng và số trục căn. Ví dụ: 0812, 08A15A"
+        "description": "Xác định mã căn hộ sử dụng thông tin trong cặp thẻ XML <xac-dinh-ma-can-ho></xac-dinh-ma-can-ho> để xác định."
       }},
       "unit_axis": {{
         "type": ["string", "null"],
-        "description": "Trục căn nếu có. Ví dụ: 12, 15A"
+        "description": "Trục căn nếu có"
       }},
       "unit_floor_number": {{
         "type": ["integer", "null"],
-        "description": "Tầng nếu có. Ví dụ: 08, 08A"
+        "description": "Tầng nếu có"
       }},
       "area_land": {{
         "type": ["number", "null"],
@@ -359,20 +363,20 @@ class ZaloMessageProcessor:
       "furnished_status": {{
         "type": ["string", "null"],
         "enum": ["FULL", "PARTIAL", "UNFURNISHED", null],
-        "description": "Tình trạng nội thất: FULL (đầy đủ nội thất), PARTIAL (nội thất một phần), UNFURNISHED (không nội thất)"
+        "description": "Tình trạng nội thất: FULL (đầy đủ nội thất), PARTIAL (nội thất một phần), UNFURNISHED (không nội thất). Tìm từ khóa "đầy đủ nội thất", "full nội thất", "có nội thất", "nội thất cao cấp" => FULL; "một phần nội thất", "nội thất cơ bản" => PARTIAL; "không nội thất", "thô", "bàn giao thô" => UNFURNISHED"
       }},
       "floor_level_category": {{
         "type": ["string", "null"],
         "enum": ["LOW", "MEDIUM", "HIGH", null],
-        "description": "Vị trí tầng: LOW (tầng thấp 1-10), MEDIUM (tầng trung 11-25), HIGH (tầng cao >25)"
+        "description": "Vị trí tầng: LOW (tầng thấp 1-10), MEDIUM (tầng trung 11-25), HIGH (tầng cao >25). Dựa vào unit_floor_number hoặc mô tả trong tin nhắn. Tầng 1-10 => LOW, tầng 11-25 => MEDIUM, tầng >25 => HIGH. Nếu không nói gì thì chọn NULL"
       }},
       "move_in_ready": {{
         "type": ["boolean", "null"],
-        "description": "Căn hộ có sẵn sàng để vào ở ngay không: true=sẵn sàng, false=chưa sẵn sàng"
+        "description": "Căn hộ có sẵn sàng để vào ở ngay không: true=sẵn sàng, false=chưa sẵn sàng. Tìm từ khóa "vào ở ngay", "sẵn sàng", "bàn giao ngay", "đang trống", "có thể chuyển vào ngay" => true; "đang cho thuê", "cần sửa sang", "đang ở" => false"
       }},
       "includes_transfer_fees": {{
         "type": ["boolean", "null"],
-        "description": "Giá đã bao gồm các loại phí chuyển nhượng hay chưa: true=đã bao gồm, false=chưa bao gồm"
+        "description": "Giá đã bao gồm các loại phí chuyển nhượng hay chưa: true=đã bao gồm, false=chưa bao gồm. Tìm từ khóa "giá full phí", "bao gồm phí", "đã bao gồm phí chuyển nhượng", "giá net" => true; "chưa gồm phí", "phí chuyển nhượng riêng", "giá chưa VAT" => false"
       }}
     }},
     "required": ["property_group"],
@@ -384,7 +388,17 @@ class ZaloMessageProcessor:
 
 
 
-            {property_tree}
+{property_tree}
+<xac-dinh-ma-can-ho>
+    - Mã căn hộ thường được viết dưới dạng 2 dạng:
+    + Dạng đầy đủ cấu trúc [tòa].[tầng][trục] như: S202.08A12, P1.0x04
+    + Dạng Chỉ có [tầng][trục] như: 08A12, 0x04
+    - Mã căn hộ là S202.08A12 -> Trục căn là 12, tầng là 08A
+    - Mã căn hộ là P1.0x04 -> Trục căn là 04, tầng là 0x
+    - Mã căn là 08A12 -> Trục căn là 12, tầng là 08A
+    - Mã căn là 2606 -> Trục căn là 06, tầng là 26
+    - Mã căn là P1.0x04 -> Trục căn là 04, tầng là 0x
+</xac-dinh-ma-can-ho>
 
             Lưu ý quan trọng:
             - Chỉ trả về duy nhất JSON, không có nội dung nào khác.
@@ -395,12 +409,7 @@ class ZaloMessageProcessor:
             - Nếu không tìm thấy thông tin nào, trả về null cho trường đó.
             - Nếu bài đăng ghi tầng 1x thì đó là khoảng tầng 11 đến 19
             - Viết "TC 7tr5" nghĩa là tài chính 7 triệu 500 ngàn , ý là tài chính (ngân sách) 7.5 triệu
-            
-            Lưu ý về các trường mới:
-            - furnished_status: Tìm từ khóa "đầy đủ nội thất", "full nội thất", "có nội thất", "nội thất cao cấp" => FULL; "một phần nội thất", "nội thất cơ bản" => PARTIAL; "không nội thất", "thô", "bàn giao thô" => UNFURNISHED
-            - floor_level_category: Dựa vào unit_floor_number hoặc mô tả trong tin nhắn. Tầng 1-10 => LOW, tầng 11-25 => MEDIUM, tầng >25 => HIGH. Nếu chỉ nói "view đẹp", "tầng cao", "view thoáng" mà không nói số tầng cụ thể thì chọn HIGH
-            - move_in_ready: Tìm từ khóa "vào ở ngay", "sẵn sàng", "bàn giao ngay", "đang trống", "có thể chuyển vào ngay" => true; "đang cho thuê", "cần sửa sang", "đang ở" => false
-            - includes_transfer_fees: Tìm từ khóa "giá full phí", "bao gồm phí", "đã bao gồm phí chuyển nhượng", "giá net" => true; "chưa gồm phí", "phí chuyển nhượng riêng", "giá chưa VAT" => false
+
 
             
             """
@@ -588,132 +597,96 @@ class ZaloMessageProcessor:
     
     def update_warehouse_id_by_content_hash(self, content_hash: str, warehouse_id: int) -> bool:
         """
-        Cập nhật warehouse_id cho TẤT CẢ các messages có cùng content_hash
-        
-        Args:
-            content_hash: Hash của nội dung message
-            warehouse_id: ID của apartment trong warehouse database
-            
-        Returns:
-            True nếu cập nhật thành công, False nếu lỗi
+        Thêm warehouse_id vào set warehouse_ids cho TẤT CẢ các messages có cùng content_hash.
         """
-        max_retries = 3
-        retry_delay = 1
-        
-        for attempt in range(max_retries):
-            connection = None
-            try:
-                logger.info(f"Updating warehouse_id to {warehouse_id} for all messages with content_hash={content_hash} (attempt {attempt + 1}/{max_retries})")
-                
-                with zalo_app.app_context():
-                    connection = self.get_zalo_db_connection()
-                    if not connection:
-                        logger.error(f"No database connection available (attempt {attempt + 1})")
-                        continue
-                
-                from sqlalchemy import text
-                query = text("""
-                UPDATE zalo_received_messages 
-                SET warehouse_id = :warehouse_id 
-                WHERE content_hash = :content_hash
-                """)
-                
-                result = connection.execute(query, {"warehouse_id": warehouse_id, "content_hash": content_hash})
-                connection.commit()
-                
-                # Check if any rows were affected
-                rows_affected = result.rowcount
-                if rows_affected > 0:
-                    logger.info(f"✅ Updated {rows_affected} message(s) with content_hash={content_hash} to warehouse_id={warehouse_id}")
-                    return True
-                else:
-                    logger.warning(f"⚠️ No rows affected when updating messages with content_hash={content_hash}")
-                    return False
-                
-            except Exception as e:
-                logger.error(f"❌ Error updating warehouse_id by content_hash (attempt {attempt + 1}): {e}")
-                logger.error(f"Error type: {type(e)}")
-                
-                if attempt < max_retries - 1:
-                    logger.info(f"Retrying in {retry_delay} seconds...")
-                    time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
-                else:
-                    logger.error("❌ Failed to update warehouse_id by content_hash after all retries")
+        with zalo_app.app_context():
+            conn = self.get_zalo_db_connection()
+            if not conn:
                 return False
-                    
+            try:
+                from sqlalchemy import text
+                sel = text("SELECT id, warehouse_ids FROM zalo_received_messages WHERE content_hash = :content_hash")
+                rows = conn.execute(sel, {"content_hash": content_hash}).fetchall()
+                if not rows:
+                    return False
+                for row in rows:
+                    msg_id = row._mapping["id"]
+                    self._add_warehouse_id_to_message(conn, msg_id, row._mapping.get("warehouse_ids"), warehouse_id)
+                conn.commit()
+                logger.info(f"✅ Added warehouse_id {warehouse_id} to {len(rows)} message(s) with content_hash={content_hash}")
+                return True
+            except Exception as e:
+                conn.rollback()
+                logger.error(f"❌ Error updating warehouse_ids by content_hash: {e}")
+                return False
             finally:
-                if connection:
-                    try:
-                        connection.close()
-                    except Exception as close_error:
-                        logger.warning(f"Warning: Error closing connection: {close_error}")
-        
+                conn.close()
         return False
     
+    def _parse_warehouse_ids(self, raw) -> List[int]:
+        """Chuyển warehouse_ids từ DB (list/str/None) thành list int."""
+        if raw is None:
+            return []
+        if isinstance(raw, list):
+            return [int(x) for x in raw if x is not None]
+        if isinstance(raw, str):
+            try:
+                arr = json.loads(raw)
+                return [int(x) for x in arr] if isinstance(arr, list) else []
+            except (json.JSONDecodeError, ValueError):
+                return []
+        return []
+
+    def _add_warehouse_id_to_message(self, connection, message_id: int, current_warehouse_ids, warehouse_id: int) -> bool:
+        """Thêm warehouse_id vào set warehouse_ids của message (dùng connection có sẵn)."""
+        from sqlalchemy import text
+        ids = self._parse_warehouse_ids(current_warehouse_ids)
+        if warehouse_id in ids:
+            return True
+        ids.append(warehouse_id)
+        upd = text("UPDATE zalo_received_messages SET warehouse_ids = :warehouse_ids WHERE id = :message_id")
+        connection.execute(upd, {"warehouse_ids": json.dumps(ids), "message_id": message_id})
+        return True
+
     def _update_single_message_warehouse_id(self, message_id: int, warehouse_id: int) -> bool:
         """
-        Cập nhật warehouse_id của một tin nhắn cụ thể (fallback method)
-        
-        Args:
-            message_id: ID của tin nhắn
-            warehouse_id: ID của apartment trong warehouse database
-            
-        Returns:
-            True nếu cập nhật thành công, False nếu lỗi
+        Thêm warehouse_id vào set warehouse_ids của một tin nhắn cụ thể.
         """
         max_retries = 3
         retry_delay = 1
-        
         for attempt in range(max_retries):
             connection = None
             try:
-                logger.info(f"Updating message {message_id} warehouse_id to {warehouse_id} (attempt {attempt + 1}/{max_retries})")
-                
+                logger.info(f"Adding warehouse_id {warehouse_id} to message {message_id} (attempt {attempt + 1}/{max_retries})")
                 with zalo_app.app_context():
                     connection = self.get_zalo_db_connection()
                     if not connection:
-                        logger.error(f"No database connection available (attempt {attempt + 1})")
                         continue
-                
-                from sqlalchemy import text
-                query = text("""
-                UPDATE zalo_received_messages 
-                SET warehouse_id = :warehouse_id 
-                WHERE id = :message_id
-                """)
-                
-                result = connection.execute(query, {"warehouse_id": warehouse_id, "message_id": message_id})
-                connection.commit()
-                
-                # Check if any rows were affected
-                rows_affected = result.rowcount
-                if rows_affected > 0:
-                    logger.info(f"✅ Updated message {message_id} warehouse_id to {warehouse_id} (rows affected: {rows_affected})")
+                    from sqlalchemy import text
+                    row = connection.execute(
+                        text("SELECT warehouse_ids FROM zalo_received_messages WHERE id = :message_id"),
+                        {"message_id": message_id}
+                    ).fetchone()
+                    if not row:
+                        logger.warning(f"⚠️ Message {message_id} not found")
+                        return False
+                    self._add_warehouse_id_to_message(connection, message_id, row._mapping.get("warehouse_ids"), warehouse_id)
+                    connection.commit()
+                    logger.info(f"✅ Added warehouse_id {warehouse_id} to message {message_id}")
                     return True
-                else:
-                    logger.warning(f"⚠️ No rows affected when updating message {message_id} warehouse_id to {warehouse_id}")
-                    return False
-                
             except Exception as e:
-                logger.error(f"❌ Error updating message warehouse_id (attempt {attempt + 1}): {e}")
-                logger.error(f"Error type: {type(e)}")
-                
+                logger.error(f"❌ Error: {e}")
                 if attempt < max_retries - 1:
-                    logger.info(f"Retrying in {retry_delay} seconds...")
                     time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
+                    retry_delay *= 2
                 else:
-                    logger.error("❌ Failed to update message warehouse_id after all retries")
-                return False
-                    
+                    return False
             finally:
                 if connection:
                     try:
                         connection.close()
-                    except Exception as close_error:
-                        logger.warning(f"Warning: Error closing connection: {close_error}")
-        
+                    except Exception:
+                        pass
         return False
     
     def process_messages_batch(self, limit: int = 20):
@@ -853,7 +826,7 @@ class ZaloMessageProcessor:
                 query = text("""
                 SELECT id, session_id, config_id, sender_id, sender_name, 
                        content, thread_id, thread_type, received_at, 
-                       status_push_kafka, warehouse_id, reply_quote,
+                       status_push_kafka, warehouse_ids, reply_quote,
                        content_hash, added_document_chunks
                 FROM zalo_received_messages 
                 WHERE id = :message_id
@@ -899,13 +872,14 @@ class ZaloMessageProcessor:
                 return None, "Message not found"
             
             content = message['content']
-            current_warehouse_id = message.get('warehouse_id')
-            
+            current_warehouse_ids = self._parse_warehouse_ids(message.get('warehouse_ids'))
+            current_warehouse_id = current_warehouse_ids[0] if current_warehouse_ids else None
+
             logger.info(f"📝 Message content: {content}")
-            if current_warehouse_id:
-                logger.info(f"🔄 Message already has warehouse_id: {current_warehouse_id} - will replace")
+            if current_warehouse_ids:
+                logger.info(f"🔄 Message already has warehouse_ids: {current_warehouse_ids} - will add/replace")
             else:
-                logger.info(f"🆕 Message has no warehouse_id - will create new")
+                logger.info(f"🆕 Message has no warehouse_ids - will create new")
             
             # Gửi tới Groq để bóc tách thông tin
             logger.info("🤖 Processing with Groq...")
@@ -922,8 +896,8 @@ class ZaloMessageProcessor:
                     logger.info(f"📊 Parsed apartment data: {apartment_data}")
                     
                     # Insert/update vào warehouse database
-                    if current_warehouse_id:
-                        logger.info(f"🔄 Replacing existing apartment (ID: {current_warehouse_id})...")
+                    if current_warehouse_ids:
+                        logger.info(f"🔄 Message already linked to apartments {current_warehouse_ids}, adding new...")
                     else:
                         logger.info("🏠 Creating new apartment...")
                     
@@ -934,10 +908,10 @@ class ZaloMessageProcessor:
                         
                         # Chỉ cập nhật warehouse_id khi real_insert=True
                         if real_insert and isinstance(warehouse_result, int):
-                            if current_warehouse_id:
-                                logger.info(f"🔄 Replacing warehouse_id from {current_warehouse_id} to {warehouse_result} for message {message_id}")
+                            if current_warehouse_ids:
+                                logger.info(f"🔄 Adding warehouse_id {warehouse_result} to message {message_id} (existing: {current_warehouse_ids})")
                             else:
-                                logger.info(f"🆕 Setting warehouse_id {warehouse_result} for message {message_id}")
+                                logger.info(f"🆕 Setting warehouse_ids to [{warehouse_result}] for message {message_id}")
                             
                             update_success = self.update_message_warehouse_id(message_id, warehouse_result)
                             
@@ -966,7 +940,7 @@ class ZaloMessageProcessor:
                             'apartment_id': warehouse_result if isinstance(warehouse_result, int) else None,
                             'apartment_full': apartment_full_data,  # Full data from warehouse
                             'real_insert': real_insert,
-                            'replaced': current_warehouse_id is not None,
+                            'replaced': bool(current_warehouse_ids),
                             'previous_warehouse_id': current_warehouse_id
                         }
                     else:
@@ -1181,22 +1155,25 @@ class ZaloMessageProcessor:
                     logger.info(f"📊 Parsed {len(apartments_data)} apartment(s) from batch")
                     logger.info(f"📋 Processing {len(messages)} message(s)")
                     
-                    # Đảm bảo số lượng apartments khớp với số lượng messages
-                    if len(apartments_data) != len(messages):
-                        logger.warning(f"⚠️ Mismatch: {len(apartments_data)} apartments but {len(messages)} messages")
-                        logger.warning(f"⚠️ Will process {min(len(apartments_data), len(messages))} pairs")
+                    # Ghép apartment với message: 1 message có thể có nhiều apartments (theo message_id trong response hoặc theo index)
+                    message_ids_set = {m['id'] for m in messages}
+                    pairs = []  # [(message_id, apartment_data), ...]
+                    for i, apartment_data in enumerate(apartments_data):
+                        mid = apartment_data.get('message_id')
+                        if mid is not None and mid in message_ids_set:
+                            pairs.append((int(mid), apartment_data))
+                        else:
+                            # Fallback: ghép theo index (message i % len(messages))
+                            idx = i % len(messages) if messages else 0
+                            pairs.append((messages[idx]['id'], apartment_data))
+                    logger.info(f"📋 Built {len(pairs)} message–apartment pair(s) (1 message → nhiều apartment được hỗ trợ)")
                     
                     # Insert/update vào warehouse database cho từng apartment
                     results = []
                     warehouse_ids = []
                     
-                    # Xử lý từng cặp apartment-message
-                    num_to_process = min(len(apartments_data), len(messages))
-                    for i in range(num_to_process):
-                        apartment_data = apartments_data[i]
-                        message_id = messages[i]['id']
-                        
-                        logger.info(f"🏠 Processing apartment {i+1}/{num_to_process} for message {message_id}")
+                    for idx, (message_id, apartment_data) in enumerate(pairs):
+                        logger.info(f"🏠 Processing apartment {idx+1}/{len(pairs)} for message {message_id}")
                         
                         # Set data_status='REVIEWING' cho apartment data
                         apartment_data['data_status'] = 'REVIEWING'
@@ -1216,7 +1193,7 @@ class ZaloMessageProcessor:
                         }
                         
                         if warehouse_result:
-                            logger.info(f"✅ Warehouse insert/update successful for apartment {i+1}")
+                            logger.info(f"✅ Warehouse insert/update successful for apartment {idx+1}")
                             apartment_result['warehouse_success'] = True
                             apartment_result['apartment_id'] = warehouse_result if isinstance(warehouse_result, int) else None
                             
@@ -1224,16 +1201,16 @@ class ZaloMessageProcessor:
                             if isinstance(warehouse_result, int) and message_id:
                                 logger.info(f"🔄 Attempting to update warehouse_id for message {message_id} to {warehouse_result}")
                                 
-                                # Kiểm tra xem message đã có warehouse_id chưa
+                                # Kiểm tra message đã có warehouse_ids chưa
                                 current_message = self.get_message_by_id(message_id)
-                                current_warehouse_id = current_message.get('warehouse_id') if current_message else None
-                                
-                                if current_warehouse_id:
-                                    logger.info(f"🔄 Replacing warehouse_id from {current_warehouse_id} to {warehouse_result} for message {message_id}")
+                                current_warehouse_ids = self._parse_warehouse_ids(current_message.get('warehouse_ids') if current_message else None)
+                                current_warehouse_id = current_warehouse_ids[0] if current_warehouse_ids else None
+                                if current_warehouse_ids:
+                                    logger.info(f"🔄 Adding to existing warehouse_ids {current_warehouse_ids} for message {message_id}")
                                     apartment_result['replaced'] = True
                                     apartment_result['previous_warehouse_id'] = current_warehouse_id
                                 else:
-                                    logger.info(f"🆕 Setting warehouse_id {warehouse_result} for message {message_id}")
+                                    logger.info(f"🆕 Setting warehouse_ids to [{warehouse_result}] for message {message_id}")
                                 
                                 update_success = self.update_message_warehouse_id(message_id, warehouse_result)
                                 
@@ -1245,12 +1222,18 @@ class ZaloMessageProcessor:
                             else:
                                 logger.warning(f"⚠️ Skipping warehouse_id update: warehouse_result={warehouse_result}, message_id={message_id}")
                         else:
-                            logger.error(f"❌ Warehouse insert/update failed for apartment {i+1}")
+                            logger.error(f"❌ Warehouse insert/update failed for apartment {idx+1}")
                         
                         results.append(apartment_result)
                     
-                    # Load full apartment data từ warehouse cho các apartments đã insert thành công
-                    apartment_ids_to_load = [r['apartment_id'] for r in results if r.get('warehouse_success') and r.get('apartment_id')]
+                    # Load full apartment data: lấy đủ bản ghi tương ứng số apartment đã insert (giữ thứ tự, bỏ trùng)
+                    apartment_ids_to_load = []
+                    seen = set()
+                    for r in results:
+                        aid = r.get('apartment_id')
+                        if r.get('warehouse_success') and aid is not None and aid not in seen:
+                            seen.add(aid)
+                            apartment_ids_to_load.append(aid)
                     full_apartments_data = []
                     
                     if apartment_ids_to_load:
@@ -1272,10 +1255,10 @@ class ZaloMessageProcessor:
                             'successful_count': len([r for r in results if r['warehouse_success']]),
                             'processing_time': elapsed_time
                         },
-                        'messages': messages,
-                        'apartments': apartments_data,  # Raw data from Groq
-                        'apartments_full': full_apartments_data,  # Full data from warehouse
-                        'results': results,
+                        'zalo_messages': messages,
+                        'groq_parsed_apartments': apartments_data,
+                        'warehouse_apartments': full_apartments_data,
+                        'insert_results': results,
                         'warehouse_ids': warehouse_ids,
                         'groq_result': groq_result
                     }

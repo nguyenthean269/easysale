@@ -1,6 +1,7 @@
 from flask_sqlalchemy import SQLAlchemy
 from datetime import datetime
 from sqlalchemy import Enum, Index, FetchedValue
+from sqlalchemy.dialects.mysql import JSON
 
 # Tạo db instance riêng
 db = SQLAlchemy()
@@ -452,7 +453,7 @@ class ZaloReceivedMessage(db.Model):
     thread_type = db.Column(db.String(50), nullable=True)
     received_at = db.Column(db.DateTime, nullable=True)
     status_push_kafka = db.Column(db.Integer, default=0)
-    warehouse_id = db.Column(db.BigInteger, nullable=True)  # ID của apartment trong warehouse database
+    warehouse_ids = db.Column(JSON, nullable=True)  # Mảng ID apartment trong warehouse (set), e.g. [101, 102]
     reply_quote = db.Column(db.Text, nullable=True)
     # content_hash là generated column trong MySQL, không set giá trị khi insert
     content_hash = db.Column(db.String(40), FetchedValue())  # Generated column - SHA hash of content (MySQL tự tính)
@@ -460,6 +461,7 @@ class ZaloReceivedMessage(db.Model):
     
     # Relationships
     config = db.relationship('ZaloConfig', backref='received_messages')
+    extra_senders = db.relationship('ZaloReceivedMessageExtraSender', backref='message', cascade='all, delete-orphan', foreign_keys='ZaloReceivedMessageExtraSender.message_id')
     
     # Note: content_hash is a generated column in the database
     # It will be automatically calculated by MySQL based on the content field
@@ -477,8 +479,36 @@ class ZaloReceivedMessage(db.Model):
             'thread_type': self.thread_type,
             'received_at': self.received_at.isoformat() if self.received_at else None,
             'status_push_kafka': self.status_push_kafka,
-            'warehouse_id': self.warehouse_id,
+            'warehouse_ids': self.warehouse_ids,
             'reply_quote': self.reply_quote,
             'content_hash': self.content_hash,
             'added_document_chunks': self.added_document_chunks
+        }
+
+
+class ZaloReceivedMessageExtraSender(db.Model):
+    """Lưu sender_id của các tin nhắn trùng content (cùng content_hash, insert sau bản ghi đầu)."""
+    __tablename__ = 'zalo_received_message_extra_senders'
+    
+    id = db.Column(db.Integer, primary_key=True, autoincrement=True)
+    message_id = db.Column(db.Integer, db.ForeignKey('zalo_received_messages.id', ondelete='CASCADE'), nullable=False)
+    sender_id = db.Column(db.String(255), nullable=False)
+    sender_name = db.Column(db.String(255), nullable=True)
+    session_id = db.Column(db.Integer, db.ForeignKey('zalo_sessions.id'), nullable=False)
+    config_id = db.Column(db.Integer, db.ForeignKey('zalo_configs.id'), nullable=True)
+    received_at = db.Column(db.DateTime, nullable=True)
+    
+    __table_args__ = (
+        db.UniqueConstraint('message_id', 'sender_id', name='uq_message_sender'),
+    )
+    
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'message_id': self.message_id,
+            'sender_id': self.sender_id,
+            'sender_name': self.sender_name,
+            'session_id': self.session_id,
+            'config_id': self.config_id,
+            'received_at': self.received_at.isoformat() if self.received_at else None
         }

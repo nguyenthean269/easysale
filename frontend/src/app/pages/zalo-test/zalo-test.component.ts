@@ -31,7 +31,7 @@ interface UnprocessedMessage {
   thread_type?: string;
   received_at: string;
   status_push_kafka: number;
-  warehouse_id?: number;
+  warehouse_ids?: number[];
   reply_quote?: string;
   content_hash?: string;
   added_document_chunks?: boolean;
@@ -206,13 +206,20 @@ interface ParsedApartmentData {
                       (Page {{ currentPage }}, showing {{ unprocessedMessages.length }})
                     </span>
                   </h5>
-                  <div class="flex gap-2 items-center">
+                  <div class="flex gap-2 items-center flex-wrap">
                     <select [(ngModel)]="messageWarehouseIdFilter" 
                             (change)="onWarehouseIdFilterChange()"
                             class="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500">
                       <option value="NULL">Chưa push vào Warehouse</option>
                       <option value="NOT_NULL">Đã push vào Warehouse</option>
                       <option value="ALL">Tất cả Messages</option>
+                    </select>
+                    <select [(ngModel)]="messageSort" 
+                            (change)="onMessageSortChange()"
+                            class="px-3 py-1 border border-gray-300 rounded text-sm focus:ring-2 focus:ring-blue-500 focus:border-blue-500"
+                            title="Sắp xếp theo thời gian">
+                      <option value="newest">Mới nhất trước</option>
+                      <option value="oldest">Cũ nhất trước</option>
                     </select>
                   <button class="bg-gray-600 hover:bg-gray-700 text-white px-3 py-1 rounded text-sm font-medium transition-colors" 
                           (click)="loadUnprocessedMessages()">
@@ -274,10 +281,10 @@ interface ParsedApartmentData {
                           </td>
                           <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{{ message.received_at | date:'short' }}</td>
                           <td class="px-6 py-4 whitespace-nowrap">
-                            <span *ngIf="message.warehouse_id" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                              Warehouse ID: {{ message.warehouse_id }}
+                            <span *ngIf="getMessageWarehouseIds(message).length" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              Warehouse IDs: {{ getMessageWarehouseIds(message).join(', ') }}
                             </span>
-                            <span *ngIf="!message.warehouse_id" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
+                            <span *ngIf="!getMessageWarehouseIds(message).length" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-yellow-100 text-yellow-800">
                               Chưa push
                             </span>
                           </td>
@@ -295,7 +302,7 @@ interface ParsedApartmentData {
                             </div>
                             <div *ngIf="!getApartmentForMessage(message.id)" class="text-gray-400 text-xs">
                               <div>No apartment</div>
-                              <div class="text-gray-300">Warehouse ID: {{ message.warehouse_id || 'NULL' }}</div>
+                              <div class="text-gray-300">Warehouse IDs: {{ getMessageWarehouseIds(message).length ? getMessageWarehouseIds(message).join(', ') : 'NULL' }}</div>
                             </div>
                           </td>
                           <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
@@ -309,8 +316,8 @@ interface ParsedApartmentData {
                                 {{ messageLoadingStates.get(message.id) ? 'Processing...' : 'Test' }}
                               </button>
                               
-                              <!-- Detail Button (only show if has warehouse_id) -->
-                              <button *ngIf="message.warehouse_id" 
+                              <!-- Detail Button (only show if has warehouse_ids) -->
+                              <button *ngIf="getMessageWarehouseIds(message).length" 
                                       class="inline-flex items-center px-3 py-1.5 text-sm font-medium text-green-600 hover:text-green-900 transition-all duration-200 rounded-md hover:bg-green-50" 
                                       (click)="openDetailModal(message.id)">
                                 <i class="fas fa-eye mr-1"></i>
@@ -386,9 +393,9 @@ interface ParsedApartmentData {
                       <p class="text-green-700 text-sm mt-1">{{ getBatchSummary() }}</p>
                     </div>
                     
-                    <div *ngIf="batchProcessingResult.data?.results" class="space-y-2">
+                    <div *ngIf="batchProcessingResult.data?.insert_results" class="space-y-2">
                       <h6 class="font-medium text-gray-700">Individual Results:</h6>
-                      <div *ngFor="let result of batchProcessingResult.data.results" 
+                      <div *ngFor="let result of batchProcessingResult.data.insert_results" 
                            class="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
                         <div class="flex items-center">
                           <i *ngIf="result.warehouse_success" class="fas fa-check-circle text-green-500 mr-2"></i>
@@ -422,11 +429,12 @@ interface ParsedApartmentData {
     <!-- Apartment Details Modal -->
     <app-apartment-details-modal
       [visible]="showModal"
-      [apartmentIds]="modalApartmentIds"
-      [apartments]="modalApartments"
-      [results]="modalResults"
-      [messages]="modalMessages"
-      (close)="closeModal()">
+      [warehouseApartmentIds]="modalWarehouseApartmentIds"
+      [warehouseApartments]="modalWarehouseApartments"
+      [insertResults]="modalInsertResults"
+      [zaloMessages]="modalZaloMessages"
+      (close)="closeModal()"
+      (apartmentUpdated)="onApartmentUpdated($event)">
     </app-apartment-details-modal>
   `,
   styles: [`
@@ -528,6 +536,9 @@ export class ZaloTestComponent implements OnInit, OnDestroy {
   // Message warehouse_id filter
   messageWarehouseIdFilter: string = 'NULL';
   
+  // Message sort: newest | oldest
+  messageSort: 'newest' | 'oldest' = 'newest';
+  
   // Pagination
   currentPage: number = 1;
   pageSize: number = 20;
@@ -540,10 +551,10 @@ export class ZaloTestComponent implements OnInit, OnDestroy {
   
   // Modal state
   showModal: boolean = false;
-  modalApartmentIds: number[] = []; // List apartment IDs to load (fallback)
-  modalApartments: any[] = []; // Full apartment data from API response
-  modalResults: any[] = []; // Results from API response (data.results)
-  modalMessages: UnprocessedMessage[] = []; // List messages for batch mode
+  modalWarehouseApartmentIds: number[] = [];
+  modalWarehouseApartments: any[] = [];
+  modalInsertResults: any[] = [];
+  modalZaloMessages: UnprocessedMessage[] = [];
 
   // Schedule control
   scheduleControlLoading: boolean = false;
@@ -647,8 +658,8 @@ export class ZaloTestComponent implements OnInit, OnDestroy {
 
   loadUnprocessedMessages() {
     const offset = (this.currentPage - 1) * this.pageSize;
-    this.http.get<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; total: number; limit: number; offset: number; warehouse_id_filter: string }>(
-      `${this.apiUrl}/messages?limit=${this.pageSize}&offset=${offset}&warehouse_id=${this.messageWarehouseIdFilter}`
+    this.http.get<ZaloTestResponse & { data: UnprocessedMessage[]; count: number; total: number; limit: number; offset: number; warehouse_id_filter: string; sort: string }>(
+      `${this.apiUrl}/messages?limit=${this.pageSize}&offset=${offset}&warehouse_id=${this.messageWarehouseIdFilter}&sort=${this.messageSort}`
     ).subscribe({
       next: (response) => {
         if (response.success) {
@@ -711,9 +722,9 @@ export class ZaloTestComponent implements OnInit, OnDestroy {
           this.loadUnprocessedMessages();
           
           // Xử lý batch mode response structure
-          if (response.data?.results && response.data.results.length > 0) {
-            const results = response.data.results;
-            const successfulResults = results.filter((r: any) => r.warehouse_success && r.apartment_id);
+          if (response.data?.insert_results && response.data.insert_results.length > 0) {
+            const insertResults = response.data.insert_results;
+            const successfulResults = insertResults.filter((r: any) => r.warehouse_success && r.apartment_id);
             
             if (successfulResults.length > 0) {
               // Log thông tin chi tiết nếu cần
@@ -736,9 +747,9 @@ export class ZaloTestComponent implements OnInit, OnDestroy {
               const messages = this.unprocessedMessages.filter(msg => messageIds.includes(msg.id));
               
               // Lấy full apartment data từ response nếu có
-              const apartmentsFull = response.data?.apartments_full || [];
+              const warehouseApartments = response.data?.warehouse_apartments || [];
               
-              this.openModalWithResults(apartmentIds, apartmentsFull, successfulResults, messages);
+              this.openModalWithResults(apartmentIds, warehouseApartments, successfulResults, messages);
             }
           }
         }
@@ -838,6 +849,11 @@ export class ZaloTestComponent implements OnInit, OnDestroy {
     this.loadUnprocessedMessages();
   }
 
+  onMessageSortChange() {
+    this.currentPage = 1; // Reset to first page when sort changes
+    this.loadUnprocessedMessages();
+  }
+
   onPageSizeChange() {
     this.currentPage = 1; // Reset to first page when page size changes
     this.totalMessages = 0; // Reset total count
@@ -856,6 +872,22 @@ export class ZaloTestComponent implements OnInit, OnDestroy {
     return Math.ceil(this.totalMessages / this.pageSize);
   }
 
+  /** Chuẩn hóa warehouse_ids (API có thể trả về array hoặc chuỗi JSON) thành number[]. */
+  getMessageWarehouseIds(message: UnprocessedMessage): number[] {
+    const raw = message?.warehouse_ids;
+    if (raw == null) return [];
+    if (Array.isArray(raw)) return raw.map(id => Number(id)).filter(n => !Number.isNaN(n));
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.map((id: any) => Number(id)).filter((n: number) => !Number.isNaN(n)) : [];
+      } catch {
+        return [];
+      }
+    }
+    return [];
+  }
+
   getApartmentForMessage(messageId: number): Apartment | null {
     // No longer using cache - return null, apartment info will be loaded on demand via API
     return null;
@@ -867,40 +899,45 @@ export class ZaloTestComponent implements OnInit, OnDestroy {
   }
 
 
-  openModalWithResults(apartmentIds: number[], apartments: any[], results: any[], messages: UnprocessedMessage[]) {
-    this.modalApartmentIds = apartmentIds;
-    this.modalApartments = apartments; // Full apartment data từ API response
-    this.modalResults = results;
-    this.modalMessages = messages;
+  openModalWithResults(warehouseApartmentIds: number[], warehouseApartments: any[], insertResults: any[], zaloMessages: UnprocessedMessage[]) {
+    this.modalWarehouseApartmentIds = warehouseApartmentIds;
+    this.modalWarehouseApartments = warehouseApartments;
+    this.modalInsertResults = insertResults;
+    this.modalZaloMessages = zaloMessages;
     this.showModal = true;
-    console.log(`🏠 Opening modal with ${apartmentIds.length} apartment IDs, ${apartments.length} full apartment data, ${results.length} results, ${messages.length} messages`);
+    console.log(`🏠 Opening modal: ${warehouseApartmentIds.length} warehouse apartment IDs, ${warehouseApartments.length} warehouse records, ${insertResults.length} insert results, ${zaloMessages.length} Zalo messages`);
   }
 
   closeModal() {
     this.showModal = false;
-    this.modalApartmentIds = [];
-    this.modalApartments = [];
-    this.modalResults = [];
-    this.modalMessages = [];
+    this.modalWarehouseApartmentIds = [];
+    this.modalWarehouseApartments = [];
+    this.modalInsertResults = [];
+    this.modalZaloMessages = [];
+  }
+
+  onApartmentUpdated(event: { apartmentId: number; action: 'approved' | 'deleted' }): void {
+    if (event.action === 'deleted') {
+      this.loadUnprocessedMessages();
+    }
   }
 
   openDetailModal(messageId: number) {
-    // Mở modal với warehouse_id từ message
-    // Trường hợp này không có apartment data sẵn, modal sẽ tự gọi API
     const message = this.unprocessedMessages.find(msg => msg.id === messageId);
-    if (message && message.warehouse_id) {
+    const ids = message ? this.getMessageWarehouseIds(message) : [];
+    if (message && ids.length) {
       this.openModalWithResults(
-        [message.warehouse_id],
-        [], // Không có apartment data sẵn, modal sẽ tự load
-        [{
+        ids,
+        [],
+        ids.map(apid => ({
           message_id: messageId,
-          apartment_id: message.warehouse_id,
+          apartment_id: apid,
           warehouse_success: true
-        }],
+        })),
         [message]
       );
     } else {
-      console.error('Message not found or no warehouse_id:', messageId);
+      console.error('Message not found or no warehouse_ids:', messageId);
     }
   }
 
@@ -952,9 +989,9 @@ export class ZaloTestComponent implements OnInit, OnDestroy {
           this.loadUnprocessedMessages();
           
           // Xử lý batch mode response structure
-          if (response.data?.results && response.data.results.length > 0) {
-            const results = response.data.results;
-            const successfulResults = results.filter((r: any) => r.warehouse_success && r.apartment_id);
+          if (response.data?.insert_results && response.data.insert_results.length > 0) {
+            const insertResults = response.data.insert_results;
+            const successfulResults = insertResults.filter((r: any) => r.warehouse_success && r.apartment_id);
             
             if (successfulResults.length > 0) {
               // Log thông tin về successful results
@@ -975,10 +1012,10 @@ export class ZaloTestComponent implements OnInit, OnDestroy {
               const messages = this.unprocessedMessages.filter(msg => messageIds.includes(msg.id));
               
               // Lấy full apartment data từ response nếu có
-              const apartmentsFull = response.data?.apartments_full || [];
+              const warehouseApartments = response.data?.warehouse_apartments || [];
               
-              console.log(`Opening modal with ${apartmentIds.length} apartment IDs, ${apartmentsFull.length} full apartment data`);
-              this.openModalWithResults(apartmentIds, apartmentsFull, successfulResults, messages);
+              console.log(`Opening modal with ${apartmentIds.length} warehouse apartment IDs, ${warehouseApartments.length} warehouse apartment records`);
+              this.openModalWithResults(apartmentIds, warehouseApartments, successfulResults, messages);
             }
           }
           

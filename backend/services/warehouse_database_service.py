@@ -144,7 +144,19 @@ class WarehouseDatabaseService:
         
         logger.warning(f"Unit type '{unit_type_name}' not found in mapping")
         return None
-    
+
+    @staticmethod
+    def format_phone_number(phone: Optional[str]) -> Optional[str]:
+        """
+        Chuẩn hóa số điện thoại: chỉ giữ chữ số.
+        Ví dụ: 0979.468.357 -> 0979468357, 0979-468-357 -> 0979468357.
+        Trả về None nếu input None hoặc chuỗi rỗng sau khi format.
+        """
+        if phone is None:
+            return None
+        digits = ''.join(c for c in str(phone).strip() if c.isdigit())
+        return digits if digits else None
+
     def insert_apartment_via_api(self, apartment_data: Dict) -> bool:
         """
         Insert apartment vào warehouse database thông qua API
@@ -190,7 +202,7 @@ class WarehouseDatabaseService:
                 'status': apartment_data.get('status'),
                 'data_status': apartment_data.get('data_status', 'PENDING'),  # Default to PENDING
                 'listing_type': apartment_data.get('listing_type'),
-                'phone_number': apartment_data.get('phone_number'),
+                'phone_number': self.format_phone_number(apartment_data.get('phone_number')),
                 'price_rent': apartment_data.get('price_rent'),
                 'furnished_status': apartment_data.get('furnished_status'),
                 'floor_level_category': apartment_data.get('floor_level_category'),
@@ -201,17 +213,18 @@ class WarehouseDatabaseService:
             
             logger.info(f"🔍 Prepared apartment_record: {apartment_record}")
             
-            # Gọi API warehouse để insert
-            api_url = f"http://localhost:5000/warehouse/api/warehouse/apartments/single-insert"
-            
-            response = requests.post(api_url, json=apartment_record, timeout=30)
-            
+            # Gọi API warehouse để insert (dùng batch-insert với mảng 1 phần tử)
+            api_url = f"http://localhost:5000/warehouse/api/warehouse/apartments/batch-insert"
+
+            response = requests.post(api_url, json={'apartments': [apartment_record]}, timeout=30)
+
             if response.status_code == 200:
                 result = response.json()
                 if result.get('success'):
-                    apartment_id = result.get('data', {}).get('apartment_id')
+                    apartment_ids = result.get('data', {}).get('apartment_ids', [])
+                    apartment_id = apartment_ids[0] if apartment_ids else None
                     logger.info(f"✅ Successfully inserted apartment via API: {apartment_record.get('unit_code', 'N/A')} (ID: {apartment_id})")
-                    return apartment_id  # Trả về apartment_id thay vì True
+                    return apartment_id
                 else:
                     logger.error(f"❌ API returned error: {result.get('error')}")
                     return False
@@ -226,127 +239,6 @@ class WarehouseDatabaseService:
             import traceback
             logger.error(f"❌ Full traceback: {traceback.format_exc()}")
             return False
-    
-    def insert_apartment_direct(self, apartment_data: Dict) -> bool:
-        """
-        Insert hoặc update apartment vào warehouse database trực tiếp
-        
-        Args:
-            apartment_data: Dữ liệu căn hộ từ Groq
-            
-        Returns:
-            True nếu thành công, False nếu lỗi
-        """
-        connection = None
-        try:
-            with warehouse_app.app_context():
-                connection = self.get_warehouse_db_connection()
-                if not connection:
-                    return False
-                
-                from sqlalchemy import text
-                # Map unit_type name sang ID
-                unit_type_id = None
-                if apartment_data.get('unit_type'):
-                    unit_type_id = self.map_unit_type_to_id(apartment_data['unit_type'])
-                
-                # Chuẩn bị dữ liệu với hardcode values
-                apartment_record = {
-                    'property_group': 1,  # Hardcode
-                    'unit_type': unit_type_id,
-                    'unit_code': apartment_data.get('unit_code'),
-                    'unit_axis': apartment_data.get('unit_axis'),
-                    'unit_floor_number': apartment_data.get('unit_floor_number'),
-                    'area_land': apartment_data.get('area_land'),
-                    'area_construction': apartment_data.get('area_construction'),
-                    'area_net': apartment_data.get('area_net'),
-                    'area_gross': apartment_data.get('area_gross'),
-                    'num_bedrooms': apartment_data.get('num_bedrooms'),
-                    'num_bathrooms': apartment_data.get('num_bathrooms'),
-                    'type_view': None,  # Hardcode
-                    'direction_door': apartment_data.get('direction_door'),
-                    'direction_balcony': apartment_data.get('direction_balcony'),
-                    'price': apartment_data.get('price'),
-                    'price_early': apartment_data.get('price_early'),
-                    'price_schedule': apartment_data.get('price_schedule'),
-                    'price_loan': apartment_data.get('price_loan'),
-                    'notes': apartment_data.get('notes'),
-                    'status': apartment_data.get('status'),
-                    'data_status': apartment_data.get('data_status', 'PENDING'),  # Default to PENDING
-                    'unit_allocation': 'QUY_CHEO'  # Hardcode
-                }
-                
-                # Kiểm tra xem có căn hộ nào với unit_code này chưa
-                if apartment_record['unit_code']:
-                    check_query = text("SELECT id FROM apartments WHERE unit_code = :unit_code")
-                    result = connection.execute(check_query, {"unit_code": apartment_record['unit_code']})
-                    existing = result.fetchone()
-                    
-                    if existing:
-                        # Update existing record
-                        update_fields = []
-                        update_values = {}
-                        
-                        for field, value in apartment_record.items():
-                            if value is not None and field != 'property_group':  # Không update property_group
-                                update_fields.append(f"{field} = :{field}")
-                                update_values[field] = value
-                        
-                        if update_fields:
-                            update_values['id'] = existing[0]  # Add ID for WHERE clause
-                            update_query = text(f"""
-                                UPDATE apartments 
-                                SET {', '.join(update_fields)}
-                                WHERE id = :id
-                            """)
-                            connection.execute(update_query, update_values)
-                            logger.info(f"Updated apartment with unit_code: {apartment_record['unit_code']}")
-                    else:
-                        # Insert new record
-                        insert_fields = []
-                        insert_values = {}
-                        
-                        for field, value in apartment_record.items():
-                            if value is not None:
-                                insert_fields.append(field)
-                                insert_values[field] = value
-                        
-                        if insert_fields:
-                            placeholders = [f":{field}" for field in insert_fields]
-                            insert_query = text(f"""
-                                INSERT INTO apartments ({', '.join(insert_fields)})
-                                VALUES ({', '.join(placeholders)})
-                            """)
-                            connection.execute(insert_query, insert_values)
-                            logger.info(f"Inserted new apartment with unit_code: {apartment_record['unit_code']}")
-                else:
-                    # Không có unit_code, insert mới
-                    insert_fields = []
-                    insert_values = {}
-                    
-                    for field, value in apartment_record.items():
-                        if value is not None:
-                            insert_fields.append(field)
-                            insert_values[field] = value
-                    
-                    if insert_fields:
-                        placeholders = [f":{field}" for field in insert_fields]
-                        insert_query = text(f"""
-                            INSERT INTO apartments ({', '.join(insert_fields)})
-                            VALUES ({', '.join(placeholders)})
-                        """)
-                        connection.execute(insert_query, insert_values)
-                        logger.info("Inserted new apartment without unit_code")
-                
-                connection.commit()
-                return True
-                
-        except Exception as e:
-            logger.error(f"Error inserting/updating apartment: {e}")
-            return False
-        finally:
-            if connection:
-                connection.close()
     
     def get_apartments_list(self, limit: int = 100, offset: int = 0, property_group_id: Optional[int] = None, property_group_slug: Optional[str] = None, unit_type_id: Optional[int] = None, unit_type_slug: Optional[str] = None, listing_type: Optional[str] = None, price_from: Optional[float] = None, price_to: Optional[float] = None, area_from: Optional[float] = None, area_to: Optional[float] = None) -> Dict:
         """
@@ -627,7 +519,10 @@ class WarehouseDatabaseService:
                     a.price_rent,
                     a.notes,
                     a.status,
+                    a.data_status,
                     a.unit_allocation,
+                    a.listing_type,
+                    a.phone_number,
                     a.furnished_status,
                     a.floor_level_category,
                     a.move_in_ready,
@@ -697,7 +592,63 @@ class WarehouseDatabaseService:
             }
         else:
             return result
-    
+
+    def update_apartment_data_status(self, apartment_id: int, data_status: str) -> Dict:
+        """
+        Cập nhật data_status của apartment (REVIEWING | PENDING | APPROVED).
+        """
+        if data_status not in ('REVIEWING', 'PENDING', 'APPROVED'):
+            return {'success': False, 'error': 'data_status must be REVIEWING, PENDING or APPROVED'}
+        connection = None
+        try:
+            with warehouse_app.app_context():
+                connection = self.get_warehouse_db_connection()
+                if not connection:
+                    return {'success': False, 'error': 'Cannot connect to warehouse database'}
+                from sqlalchemy import text
+                q = text("UPDATE apartments SET data_status = :data_status WHERE id = :apartment_id")
+                result = connection.execute(q, {"data_status": data_status, "apartment_id": apartment_id})
+                connection.commit()
+                if result.rowcount == 0:
+                    return {'success': False, 'error': f'Apartment {apartment_id} not found'}
+                logger.info(f"Updated apartment {apartment_id} data_status to {data_status}")
+                return {'success': True, 'apartment_id': apartment_id, 'data_status': data_status}
+        except Exception as e:
+            if connection:
+                connection.rollback()
+            logger.error(f"Error updating apartment data_status: {e}")
+            return {'success': False, 'error': str(e)}
+        finally:
+            if connection:
+                connection.close()
+
+    def delete_apartment(self, apartment_id: int) -> Dict:
+        """
+        Xóa apartment khỏi bảng apartments (hard delete).
+        """
+        connection = None
+        try:
+            with warehouse_app.app_context():
+                connection = self.get_warehouse_db_connection()
+                if not connection:
+                    return {'success': False, 'error': 'Cannot connect to warehouse database'}
+                from sqlalchemy import text
+                q = text("DELETE FROM apartments WHERE id = :apartment_id")
+                result = connection.execute(q, {"apartment_id": apartment_id})
+                connection.commit()
+                if result.rowcount == 0:
+                    return {'success': False, 'error': f'Apartment {apartment_id} not found'}
+                logger.info(f"Deleted apartment {apartment_id}")
+                return {'success': True, 'apartment_id': apartment_id}
+        except Exception as e:
+            if connection:
+                connection.rollback()
+            logger.error(f"Error deleting apartment: {e}")
+            return {'success': False, 'error': str(e)}
+        finally:
+            if connection:
+                connection.close()
+
     def search_apartments(self, search_query: str, limit: int = 50, offset: int = 0) -> Dict:
         """
         Tìm kiếm apartments với từ khóa

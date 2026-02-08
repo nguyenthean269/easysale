@@ -6,6 +6,8 @@ export const serverRoutes: ServerRoute[] = [
   { path: 'about', renderMode: RenderMode.Prerender },
   { path: 'contact', renderMode: RenderMode.Prerender },
   { path: 'login', renderMode: RenderMode.Prerender },
+  { path: 'dashboard', renderMode: RenderMode.Client },
+  { path: 'dashboard/*', renderMode: RenderMode.Client },
   // Route có matcher (can-ho-chung-cu-ban, can-ho-chung-cu-cho-thue, dashboard, ...) dùng Server
   { path: '**', renderMode: RenderMode.Server }
 ];

@@ -3,6 +3,7 @@ Zalo Bot Manager Service
 Quản lý nhiều Zalo bot theo config_id
 """
 
+import hashlib
 import json
 import logging
 import threading
@@ -12,7 +13,8 @@ import sys
 import os
 from datetime import datetime
 from flask import Flask
-from models import db, ZaloConfig, ZaloSession, ZaloReceivedMessage, ZaloMessage
+from sqlalchemy.exc import IntegrityError
+from models import db, ZaloConfig, ZaloSession, ZaloReceivedMessage, ZaloReceivedMessageExtraSender, ZaloMessage
 
 # Helper function để lấy Flask app instance (tránh circular import)
 def get_flask_app():
@@ -196,27 +198,45 @@ class ZaloBotManager:
                 else:
                     logger.info(f"Config {config_id}: Sử dụng session hiện có {db_session.id}")
                 
-                # Tạo received message record
-                received_msg = ZaloReceivedMessage(
-                    session_id=db_session.id,
-                    config_id=config_id,
-                    sender_id=str(sender_id),
-                    sender_name=str(sender_name),
-                    content=str(content),
-                    thread_id=str(thread_id) if thread_id else None,
-                    thread_type=str(thread_type) if thread_type else None,
-                    received_at=datetime.now(),
-                    status_push_kafka=0
-                )
+                # Hash content giống MySQL SHA(content) để kiểm tra trùng
+                content_hash = hashlib.sha1(str(content).encode('utf-8')).hexdigest()
+                existing = ZaloReceivedMessage.query.filter_by(content_hash=content_hash).first()
                 
-                db.session.add(received_msg)
-                db.session.commit()
-                
-                logger.info(f"Config {config_id}: Đã lưu tin nhắn từ {sender_name} vào database (session_id: {db_session.id})")
-                
-                # Đánh dấu đã xử lý (không dùng Kafka nữa)
-                received_msg.status_push_kafka = 1
-                db.session.commit()
+                if existing:
+                    # Tin nhắn trùng content: chỉ lưu sender vào bảng extra_senders
+                    try:
+                        extra = ZaloReceivedMessageExtraSender(
+                            message_id=existing.id,
+                            sender_id=str(sender_id),
+                            sender_name=str(sender_name),
+                            session_id=db_session.id,
+                            config_id=config_id,
+                            received_at=datetime.now()
+                        )
+                        db.session.add(extra)
+                        db.session.commit()
+                        logger.info(f"Config {config_id}: Tin nhắn trùng content_hash, đã lưu sender {sender_name} vào extra_senders (message_id={existing.id})")
+                    except IntegrityError:
+                        db.session.rollback()
+                        logger.info(f"Config {config_id}: Sender {sender_id} đã tồn tại cho message_id={existing.id}, bỏ qua")
+                else:
+                    # Tin nhắn mới: insert vào zalo_received_messages
+                    received_msg = ZaloReceivedMessage(
+                        session_id=db_session.id,
+                        config_id=config_id,
+                        sender_id=str(sender_id),
+                        sender_name=str(sender_name),
+                        content=str(content),
+                        thread_id=str(thread_id) if thread_id else None,
+                        thread_type=str(thread_type) if thread_type else None,
+                        received_at=datetime.now(),
+                        status_push_kafka=0
+                    )
+                    db.session.add(received_msg)
+                    db.session.commit()
+                    logger.info(f"Config {config_id}: Đã lưu tin nhắn từ {sender_name} vào database (session_id: {db_session.id})")
+                    received_msg.status_push_kafka = 1
+                    db.session.commit()
                 
                 # Cập nhật stats cho config này
                 if config_id not in self.stats:

@@ -36,20 +36,20 @@ def validate_apartment_item(item: Dict[str, Any]) -> Dict[str, Any]:
     Validate và clean apartment item data
     Thiếu trường để NULL, thừa trường bỏ qua
     """
-    # Danh sách các trường hợp lệ trong bảng apartments
+    # Danh sách các trường hợp lệ trong bảng apartments (khớp với DB schema)
     valid_fields = {
         'property_group': 'int',
-        'unit_type': 'int', 
+        'unit_type': 'int',
         'unit_code': 'str',
         'unit_axis': 'str',
-        'unit_floor_number': 'int',
+        'unit_floor_number': 'str',       # char(255) trong DB
         'area_land': 'float',
         'area_construction': 'float',
         'area_net': 'float',
         'area_gross': 'float',
         'num_bedrooms': 'int',
         'num_bathrooms': 'int',
-        'type_view': 'str',
+        'type_view': 'int',               # int FK to types_view trong DB
         'direction_door': 'str',
         'direction_balcony': 'str',
         'price': 'float',
@@ -62,7 +62,11 @@ def validate_apartment_item(item: Dict[str, Any]) -> Dict[str, Any]:
         'data_status': 'str',
         'unit_allocation': 'str',
         'listing_type': 'str',
-        'phone_number': 'str'
+        'phone_number': 'str',
+        'furnished_status': 'str',
+        'floor_level_category': 'str',
+        'move_in_ready': 'bool',
+        'includes_transfer_fees': 'bool',
     }
     
     cleaned_item = {}
@@ -83,6 +87,13 @@ def validate_apartment_item(item: Dict[str, Any]) -> Dict[str, Any]:
                 try:
                     cleaned_item[field] = float(str(value).replace('m2', '').replace('tỷ', '').replace('triệu', '').strip())
                 except (ValueError, TypeError):
+                    cleaned_item[field] = None
+            elif field_type == 'bool':
+                if isinstance(value, bool):
+                    cleaned_item[field] = int(value)
+                elif isinstance(value, int):
+                    cleaned_item[field] = 1 if value else 0
+                else:
                     cleaned_item[field] = None
             elif field_type == 'str':
                 cleaned_item[field] = str(value) if value else None
@@ -105,13 +116,29 @@ def validate_apartment_item(item: Dict[str, Any]) -> Dict[str, Any]:
     if cleaned_item.get('data_status') not in ['REVIEWING', 'PENDING', 'APPROVED', None]:
         cleaned_item['data_status'] = 'PENDING'  # Default value
     
-    if cleaned_item.get('unit_allocation') not in ['QUY_CHEO', 'QUY_DOI', None]:
-        cleaned_item['unit_allocation'] = 'QUY_CHEO'  # Default value
-    
+    # unit_allocation là SET type, validate từng giá trị
+    valid_allocations = {'QUY_DOC_QUYEN', 'QUY_AN', 'QUY_CHEO', 'QUY_THUONG'}
+    if cleaned_item.get('unit_allocation'):
+        parts = [p.strip() for p in cleaned_item['unit_allocation'].split(',')]
+        valid_parts = [p for p in parts if p in valid_allocations]
+        cleaned_item['unit_allocation'] = ','.join(valid_parts) if valid_parts else 'QUY_CHEO'
+
     # Validate listing_type enum values
     if cleaned_item.get('listing_type') not in ['CAN_THUE', 'CAN_CHO_THUE', 'CAN_BAN', 'CAN_MUA', 'KHAC', None]:
         cleaned_item['listing_type'] = None
-    
+
+    # Validate furnished_status enum
+    if cleaned_item.get('furnished_status') not in ['FULL', 'PARTIAL', 'UNFURNISHED', None]:
+        cleaned_item['furnished_status'] = None
+
+    # Validate floor_level_category enum
+    if cleaned_item.get('floor_level_category') not in ['LOW', 'MEDIUM', 'HIGH', None]:
+        cleaned_item['floor_level_category'] = None
+
+    # data_status là NOT NULL, default PENDING
+    if not cleaned_item.get('data_status'):
+        cleaned_item['data_status'] = 'PENDING'
+
     return cleaned_item
 
 @warehouse_bp.route('/api/warehouse/apartments/batch-insert', methods=['POST'])
@@ -178,43 +205,35 @@ def batch_insert_apartments():
                 num_bedrooms, num_bathrooms, type_view,
                 direction_door, direction_balcony,
                 price, price_early, price_schedule, price_loan, price_rent,
-                notes, status, unit_allocation, listing_type, phone_number
+                notes, status, data_status, unit_allocation, listing_type, phone_number,
+                furnished_status, floor_level_category, move_in_ready, includes_transfer_fees
             ) VALUES (
                 %(property_group)s, %(unit_type)s, %(unit_code)s, %(unit_axis)s, %(unit_floor_number)s,
                 %(area_land)s, %(area_construction)s, %(area_net)s, %(area_gross)s,
                 %(num_bedrooms)s, %(num_bathrooms)s, %(type_view)s,
                 %(direction_door)s, %(direction_balcony)s,
                 %(price)s, %(price_early)s, %(price_schedule)s, %(price_loan)s, %(price_rent)s,
-                %(notes)s, %(status)s, %(unit_allocation)s, %(listing_type)s, %(phone_number)s
+                %(notes)s, %(status)s, %(data_status)s, %(unit_allocation)s, %(listing_type)s, %(phone_number)s,
+                %(furnished_status)s, %(floor_level_category)s, %(move_in_ready)s, %(includes_transfer_fees)s
             )
             """
             
-            # Execute batch insert
-            inserted_count = 0
-            errors = []
-            
-            for i, apartment in enumerate(cleaned_apartments):
-                try:
-                    cursor.execute(insert_sql, apartment)
-                    inserted_count += 1
-                    logger.info(f"Inserted apartment {i+1}: {apartment.get('unit_code', 'N/A')}")
-                except Exception as e:
-                    error_msg = f"Error inserting apartment {i+1} ({apartment.get('unit_code', 'N/A')}): {str(e)}"
-                    logger.error(error_msg)
-                    errors.append(error_msg)
-            
-            # Commit transaction
+            # Execute batch insert using executemany
+            cursor.executemany(insert_sql, cleaned_apartments)
             connection.commit()
-            
-            logger.info(f"Batch insert completed: {inserted_count} inserted, {len(errors)} errors")
-            
+
+            inserted_count = cursor.rowcount
+            # lastrowid trả về ID của record đầu tiên, các record sau có ID liên tiếp
+            first_id = cursor.lastrowid
+            apartment_ids = list(range(first_id, first_id + inserted_count)) if first_id else []
+            logger.info(f"Batch insert completed: {inserted_count} inserted, IDs: {apartment_ids}")
+
             return jsonify({
                 'success': True,
                 'data': {
                     'total_items': len(apartments),
                     'inserted_count': inserted_count,
-                    'error_count': len(errors),
-                    'errors': errors
+                    'apartment_ids': apartment_ids
                 },
                 'message': f'Successfully inserted {inserted_count}/{len(apartments)} apartments'
             })
@@ -238,89 +257,6 @@ def batch_insert_apartments():
             'error': str(e)
         }), 500
 
-@warehouse_bp.route('/api/warehouse/apartments/single-insert', methods=['POST'])
-def single_insert_apartment():
-    """
-    Insert một apartment item vào warehouse
-    """
-    try:
-        data = request.get_json()
-        
-        if not data:
-            return jsonify({
-                'success': False,
-                'error': 'No JSON data provided'
-            }), 400
-        
-        # Validate và clean data
-        cleaned_apartment = validate_apartment_item(data)
-        
-        logger.info(f"Processing single insert for apartment: {cleaned_apartment.get('unit_code', 'N/A')}")
-        
-        # Insert vào database
-        connection = get_warehouse_connection()
-        if not connection:
-            return jsonify({
-                'success': False,
-                'error': 'Failed to connect to warehouse database'
-            }), 500
-        
-        try:
-            cursor = connection.cursor()
-            
-            # Prepare INSERT statement
-            insert_sql = """
-            INSERT INTO apartments (
-                property_group, unit_type, unit_code, unit_axis, unit_floor_number,
-                area_land, area_construction, area_net, area_gross,
-                num_bedrooms, num_bathrooms, type_view,
-                direction_door, direction_balcony,
-                price, price_early, price_schedule, price_loan, price_rent,
-                notes, status, unit_allocation, listing_type, phone_number
-            ) VALUES (
-                %(property_group)s, %(unit_type)s, %(unit_code)s, %(unit_axis)s, %(unit_floor_number)s,
-                %(area_land)s, %(area_construction)s, %(area_net)s, %(area_gross)s,
-                %(num_bedrooms)s, %(num_bathrooms)s, %(type_view)s,
-                %(direction_door)s, %(direction_balcony)s,
-                %(price)s, %(price_early)s, %(price_schedule)s, %(price_loan)s, %(price_rent)s,
-                %(notes)s, %(status)s, %(unit_allocation)s, %(listing_type)s, %(phone_number)s
-            )
-            """
-            
-            cursor.execute(insert_sql, cleaned_apartment)
-            connection.commit()
-            
-            apartment_id = cursor.lastrowid
-            
-            logger.info(f"Successfully inserted apartment: {cleaned_apartment.get('unit_code', 'N/A')} (ID: {apartment_id})")
-            
-            return jsonify({
-                'success': True,
-                'data': {
-                    'apartment_id': apartment_id,
-                    'apartment_data': cleaned_apartment
-                },
-                'message': f'Successfully inserted apartment: {cleaned_apartment.get("unit_code", "N/A")}'
-            })
-            
-        except Exception as e:
-            connection.rollback()
-            logger.error(f"Database error during single insert: {e}")
-            return jsonify({
-                'success': False,
-                'error': f'Database error: {str(e)}'
-            }), 500
-            
-        finally:
-            cursor.close()
-            connection.close()
-        
-    except Exception as e:
-        logger.error(f"Error in single_insert_apartment: {str(e)}")
-        return jsonify({
-            'success': False,
-            'error': str(e)
-        }), 500
 
 @warehouse_bp.route('/api/warehouse/apartments/test', methods=['GET'])
 def test_warehouse_connection():
@@ -512,6 +448,40 @@ def get_apartment_by_id(apartment_id):
             'success': False,
             'error': str(e)
         }), 500
+
+@warehouse_bp.route('/api/warehouse/apartments/<int:apartment_id>/data-status', methods=['PATCH'])
+def update_apartment_data_status(apartment_id):
+    """
+    Cập nhật data_status của apartment (REVIEWING | PENDING | APPROVED).
+    Body: {"data_status": "APPROVED"}
+    """
+    try:
+        data = request.get_json() or {}
+        data_status = data.get('data_status')
+        if not data_status or data_status not in ('REVIEWING', 'PENDING', 'APPROVED'):
+            return jsonify({
+                'success': False,
+                'error': 'data_status is required and must be REVIEWING, PENDING or APPROVED'
+            }), 400
+        result = warehouse_service.update_apartment_data_status(apartment_id, data_status)
+        if result.get('success'):
+            return jsonify(result)
+        return jsonify(result), 404 if 'not found' in result.get('error', '').lower() else 500
+    except Exception as e:
+        logger.error(f"Error in update_apartment_data_status: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+@warehouse_bp.route('/api/warehouse/apartments/<int:apartment_id>', methods=['DELETE'])
+def delete_apartment(apartment_id):
+    """Xóa apartment khỏi warehouse (hard delete)."""
+    try:
+        result = warehouse_service.delete_apartment(apartment_id)
+        if result.get('success'):
+            return jsonify(result)
+        return jsonify(result), 404 if 'not found' in result.get('error', '').lower() else 500
+    except Exception as e:
+        logger.error(f"Error in delete_apartment: {str(e)}")
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @warehouse_bp.route('/api/warehouse/apartments/search', methods=['GET'])
 def search_apartments():

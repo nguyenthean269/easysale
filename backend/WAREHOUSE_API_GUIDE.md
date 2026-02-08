@@ -26,51 +26,7 @@ GET /warehouse/api/warehouse/apartments/test
 }
 ```
 
-### 2. Single Insert
-```
-POST /warehouse/api/warehouse/apartments/single-insert
-```
-
-**Request Body:**
-```json
-{
-  "property_group": 1,
-  "unit_type": 10,
-  "unit_code": "S1.01-501",
-  "unit_axis": "A",
-  "unit_floor_number": 5,
-  "area_land": 100.5,
-  "area_construction": 85.0,
-  "area_net": 75.0,
-  "area_gross": 80.0,
-  "num_bedrooms": 2,
-  "num_bathrooms": 2,
-  "type_view": "CITY_VIEW",
-  "direction_door": "DN",
-  "direction_balcony": "DB",
-  "price": 2500000000.0,
-  "price_early": 2400000000.0,
-  "price_schedule": 2450000000.0,
-  "price_loan": 2300000000.0,
-  "notes": "Căn hộ đẹp, view thành phố",
-  "status": "CHUA_BAN",
-  "unit_allocation": "QUY_CHEO"
-}
-```
-
-**Response:**
-```json
-{
-  "success": true,
-  "data": {
-    "apartment_id": 12345,
-    "apartment_data": { ... }
-  },
-  "message": "Successfully inserted apartment: S1.01-501"
-}
-```
-
-### 3. Batch Insert
+### 2. Batch Insert
 ```
 POST /warehouse/api/warehouse/apartments/batch-insert
 ```
@@ -104,8 +60,7 @@ POST /warehouse/api/warehouse/apartments/batch-insert
   "data": {
     "total_items": 2,
     "inserted_count": 2,
-    "error_count": 0,
-    "errors": []
+    "apartment_ids": [12345, 12346]
   },
   "message": "Successfully inserted 2/2 apartments"
 }
@@ -138,28 +93,6 @@ POST /warehouse/api/warehouse/apartments/batch-insert
 ```python
 import requests
 
-# Single insert
-apartment_data = {
-    "unit_code": "S1.01-501",
-    "unit_floor_number": 5,
-    "area_gross": 80.0,
-    "num_bedrooms": 2,
-    "price": 2500000000.0
-}
-
-response = requests.post(
-    "http://localhost:5000/warehouse/api/warehouse/apartments/single-insert",
-    json=apartment_data
-)
-
-if response.status_code == 200:
-    result = response.json()
-    if result['success']:
-        print(f"Inserted apartment ID: {result['data']['apartment_id']}")
-```
-
-### Batch Insert
-```python
 apartments = [
     {"unit_code": "S1.01-501", "area_gross": 80.0, "price": 2500000000.0},
     {"unit_code": "S1.01-502", "area_gross": 75.0, "price": 2400000000.0}
@@ -169,29 +102,28 @@ response = requests.post(
     "http://localhost:5000/warehouse/api/warehouse/apartments/batch-insert",
     json={"apartments": apartments}
 )
+
+if response.status_code == 200:
+    result = response.json()
+    if result['success']:
+        print(f"Inserted apartment IDs: {result['data']['apartment_ids']}")
 ```
 
 ### JavaScript/Fetch
 ```javascript
-const apartmentData = {
-    unit_code: "S1.01-501",
-    unit_floor_number: 5,
-    area_gross: 80.0,
-    num_bedrooms: 2,
-    price: 2500000000.0
-};
+const apartments = [
+    { unit_code: "S1.01-501", area_gross: 80.0, price: 2500000000.0 }
+];
 
-fetch('http://localhost:5000/warehouse/api/warehouse/apartments/single-insert', {
+fetch('http://localhost:5000/warehouse/api/warehouse/apartments/batch-insert', {
     method: 'POST',
-    headers: {
-        'Content-Type': 'application/json',
-    },
-    body: JSON.stringify(apartmentData)
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apartments })
 })
 .then(response => response.json())
 .then(data => {
     if (data.success) {
-        console.log('Inserted apartment ID:', data.data.apartment_id);
+        console.log('Inserted apartment IDs:', data.data.apartment_ids);
     }
 });
 ```
@@ -217,27 +149,30 @@ Zalo Message Processor giờ sử dụng API warehouse thay vì direct database 
 
 ```python
 # Trong ZaloMessageProcessor
-def insert_apartment_via_api(self, apartment_data: Dict) -> bool:
+def insert_apartment_via_api(self, apartment_data: Dict):
     try:
         import requests
-        
-        # Prepare data
+
         apartment_record = {
             'property_group': apartment_data.get('property_group', 1),
             'unit_type': self.map_unit_type_to_id(apartment_data.get('unit_type')),
             'unit_code': apartment_data.get('unit_code'),
             # ... other fields
         }
-        
-        # Call API
+
         response = requests.post(
-            "http://localhost:5000/warehouse/api/warehouse/apartments/single-insert",
-            json=apartment_record,
+            "http://localhost:5000/warehouse/api/warehouse/apartments/batch-insert",
+            json={'apartments': [apartment_record]},
             timeout=30
         )
-        
-        return response.status_code == 200 and response.json().get('success')
-        
+
+        if response.status_code == 200:
+            result = response.json()
+            if result.get('success'):
+                apartment_ids = result.get('data', {}).get('apartment_ids', [])
+                return apartment_ids[0] if apartment_ids else None
+        return False
+
     except Exception as e:
         logger.error(f"Error calling warehouse API: {e}")
         return False
@@ -254,11 +189,6 @@ python test_warehouse_api.py
 ```bash
 # Test connection
 curl -X GET http://localhost:5000/warehouse/api/warehouse/apartments/test
-
-# Single insert
-curl -X POST http://localhost:5000/warehouse/api/warehouse/apartments/single-insert \
-  -H "Content-Type: application/json" \
-  -d '{"unit_code": "TEST-001", "area_gross": 80.0, "price": 2500000000.0}'
 
 # Batch insert
 curl -X POST http://localhost:5000/warehouse/api/warehouse/apartments/batch-insert \

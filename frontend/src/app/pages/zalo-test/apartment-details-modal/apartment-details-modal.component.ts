@@ -13,7 +13,7 @@ interface UnprocessedMessage {
   thread_type?: string;
   received_at: string;
   status_push_kafka: number;
-  warehouse_id?: number;
+  warehouse_ids?: number[];
   reply_quote?: string;
   content_hash?: string;
   added_document_chunks?: boolean;
@@ -68,7 +68,7 @@ interface ProcessResult {
             <div *ngFor="let apartment of displayApartments; let i = index" class="border border-gray-200 rounded-lg p-4">
               <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
                 
-                <!-- Column 1: Process Results (from modalResults/results) -->
+                <!-- Column 1: Insert result (from insertResults) -->
                 <div class="space-y-4">
                   <h4 class="text-lg font-semibold text-blue-900 border-b-2 border-blue-200 pb-2">
                     📊 Process Result {{ i + 1 }}
@@ -146,52 +146,108 @@ interface ProcessResult {
                   <h4 class="text-lg font-semibold text-green-900 border-b-2 border-green-200 pb-2">
                     🏠 Apartment {{ i + 1 }} (ID: {{ apartment.id }})
                   </h4>
+                  {{apartment | json}}
                   
                   <!-- Basic Information -->
                   <div class="space-y-2 text-sm">
                     <div class="flex justify-between">
-                      <span class="font-medium text-gray-600">Property Group:</span>
+                      <span class="font-medium text-gray-600">Loại tin:</span>
+                      <span class="text-gray-900">{{ apartment.listing_type ?? 'N/A' }}</span>
+                    </div>
+                    
+                    <div class="flex justify-between">
+                      <span class="font-medium text-gray-600">Tòa/Khu:</span>
                       <span class="text-gray-900">{{ apartment.property_group_name || 'N/A' }}</span>
                     </div>
                     
                     <div class="flex justify-between">
-                      <span class="font-medium text-gray-600">Unit Code:</span>
+                      <span class="font-medium text-gray-600">Mã căn:</span>
                       <span class="text-gray-900 font-mono">{{ apartment.unit_code || 'N/A' }}</span>
                     </div>
                     
                     <div class="flex justify-between">
-                      <span class="font-medium text-gray-600">Unit Type:</span>
+                      <span class="font-medium text-gray-600">Loại căn:</span>
                       <span class="text-gray-900">{{ apartment.unit_type_name || 'N/A' }}</span>
                     </div>
                     
                     <div class="flex justify-between">
-                      <span class="font-medium text-gray-600">Floor:</span>
+                      <span class="font-medium text-gray-600">Tầng:</span>
                       <span class="text-gray-900">{{ apartment.unit_floor_number || 'N/A' }}</span>
                     </div>
                     
                     <div class="flex justify-between">
-                      <span class="font-medium text-gray-600">Area:</span>
+                      <span class="font-medium text-gray-600">Diện tích:</span>
                       <span class="text-gray-900">{{ formatArea(apartment.area_gross) }}</span>
                     </div>
                     
                     <div class="flex justify-between">
-                      <span class="font-medium text-gray-600">Price:</span>
+                      <span class="font-medium text-gray-600">Giá:</span>
                       <span class="text-green-600 font-semibold">{{ formatPrice(apartment.price) }}</span>
                     </div>
                     
                     <div class="flex justify-between">
-                      <span class="font-medium text-gray-600">Rent Price:</span>
+                      <span class="font-medium text-gray-600">Giá thuê:</span>
                       <span class="text-red-600">{{ formatPrice(apartment.price_rent) }}</span>
                     </div>
                     
                     <div class="flex justify-between">
-                      <span class="font-medium text-gray-600">Bedrooms:</span>
+                      <span class="font-medium text-gray-600">Số phòng ngủ:</span>
                       <span class="text-gray-900">{{ apartment.num_bedrooms || 'N/A' }}</span>
                     </div>
                     
                     <div class="flex justify-between">
-                      <span class="font-medium text-gray-600">Bathrooms:</span>
+                      <span class="font-medium text-gray-600">Số phòng tắm:</span>
                       <span class="text-gray-900">{{ apartment.num_bathrooms || 'N/A' }}</span>
+                    </div>
+                    
+                    <div class="flex justify-between">
+                      <span class="font-medium text-gray-600">Nội thất:</span>
+                      <span class="text-gray-900">{{ apartment.furnished_status ?? 'N/A' }}</span>
+                    </div>
+                    
+                    <div class="flex justify-between">
+                      <span class="font-medium text-gray-600">Khoảng tầng:</span>
+                      <span class="text-gray-900">{{ apartment.floor_level_category ?? 'N/A' }}</span>
+                    </div>
+                    
+                    <div class="flex justify-between">
+                      <span class="font-medium text-gray-600">Vào luôn:</span>
+                      <span class="text-gray-900">{{ formatBoolean(apartment.move_in_ready) }}</span>
+                    </div>
+                    
+                    <div class="flex justify-between">
+                      <span class="font-medium text-gray-600">Bao phí:</span>
+                      <span class="text-gray-900">{{ formatBoolean(apartment.includes_transfer_fees) }}</span>
+                    </div>
+                    
+                    <div class="flex justify-between">
+                      <span class="font-medium text-gray-600">Trạng thái:</span>
+                      <span class="inline-flex items-center px-2 py-0.5 rounded text-xs font-medium"
+                            [ngClass]="{
+                              'bg-amber-100 text-amber-800': apartment.data_status === 'REVIEWING',
+                              'bg-gray-100 text-gray-800': apartment.data_status === 'PENDING',
+                              'bg-green-100 text-green-800': apartment.data_status === 'APPROVED'
+                            }">
+                        {{ apartment.data_status || 'N/A' }}
+                      </span>
+                    </div>
+                    
+                    <div class="mt-4 flex gap-2 flex-wrap">
+                      <button *ngIf="apartment.data_status === 'REVIEWING'"
+                              (click)="approveApartment(apartment)"
+                              [disabled]="actionLoading[apartment.id]"
+                              class="px-3 py-1.5 text-sm font-medium rounded-md bg-green-600 text-white hover:bg-green-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i *ngIf="!actionLoading[apartment.id]" class="fas fa-check mr-1"></i>
+                        <i *ngIf="actionLoading[apartment.id]" class="fas fa-spinner fa-spin mr-1"></i>
+                        Duyệt
+                      </button>
+                      <button (click)="deleteApartmentItem(apartment)"
+                              [disabled]="actionLoading[apartment.id]"
+                              class="px-3 py-1.5 text-sm font-medium rounded-md bg-red-600 text-white hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed">
+                        <i *ngIf="!actionLoading[apartment.id]" class="fas fa-trash mr-1"></i>
+                        <i *ngIf="actionLoading[apartment.id]" class="fas fa-spinner fa-spin mr-1"></i>
+                        Xóa
+                      </button>
                     </div>
                   </div>
                 </div>
@@ -270,16 +326,18 @@ interface ProcessResult {
 })
 export class ApartmentDetailsModalComponent implements OnInit, OnChanges {
   @Input() visible: boolean = false;
-  @Input() apartmentIds: number[] = []; // Fallback: chỉ dùng khi không có apartments data
-  @Input() apartments: Apartment[] = []; // Full apartment data từ API response (ưu tiên)
-  @Input() results: ProcessResult[] = [];
-  @Input() messages: UnprocessedMessage[] = [];
+  @Input() warehouseApartmentIds: number[] = [];
+  @Input() warehouseApartments: Apartment[] = [];
+  @Input() insertResults: ProcessResult[] = [];
+  @Input() zaloMessages: UnprocessedMessage[] = [];
   
   @Output() close = new EventEmitter<void>();
+  @Output() apartmentUpdated = new EventEmitter<{ apartmentId: number; action: 'approved' | 'deleted' }>();
 
-  displayApartments: Apartment[] = []; // Apartments để hiển thị
+  displayApartments: Apartment[] = [];
   loading: boolean = false;
   error: string | null = null;
+  actionLoading: { [id: number]: boolean } = {};
 
   constructor(private warehouseService: WarehouseService) {}
 
@@ -288,32 +346,26 @@ export class ApartmentDetailsModalComponent implements OnInit, OnChanges {
   }
 
   ngOnChanges(changes: SimpleChanges) {
-    // Nếu có apartments data sẵn, dùng luôn (không cần gọi API)
-    if (changes['apartments'] && this.apartments && this.apartments.length > 0) {
-      this.displayApartments = this.apartments;
+    if (changes['warehouseApartments'] && this.warehouseApartments && this.warehouseApartments.length > 0) {
+      this.displayApartments = this.warehouseApartments;
       this.loading = false;
       this.error = null;
       return;
     }
     
-    // Nếu không có apartments data, chỉ load khi visible thay đổi từ false sang true
     if (changes['visible'] && this.visible && !changes['visible'].previousValue) {
-      if (this.apartments && this.apartments.length > 0) {
-        // Có apartments data sẵn, dùng luôn
-        this.displayApartments = this.apartments;
+      if (this.warehouseApartments && this.warehouseApartments.length > 0) {
+        this.displayApartments = this.warehouseApartments;
         this.loading = false;
         this.error = null;
-      } else if (this.apartmentIds.length > 0) {
-        // Không có apartments data, gọi API với apartmentIds
+      } else if (this.warehouseApartmentIds.length > 0) {
         this.loadApartments();
       }
     }
     
-    // Nếu apartmentIds thay đổi và modal đang visible, reload (chỉ khi không có apartments data)
-    if (changes['apartmentIds'] && this.visible && this.apartmentIds.length > 0 && (!this.apartments || this.apartments.length === 0)) {
-      const prevIds = changes['apartmentIds'].previousValue || [];
-      const currentIds = changes['apartmentIds'].currentValue || [];
-      // Chỉ reload nếu IDs thực sự khác nhau
+    if (changes['warehouseApartmentIds'] && this.visible && this.warehouseApartmentIds.length > 0 && (!this.warehouseApartments || this.warehouseApartments.length === 0)) {
+      const prevIds = changes['warehouseApartmentIds'].previousValue || [];
+      const currentIds = changes['warehouseApartmentIds'].currentValue || [];
       if (JSON.stringify(prevIds.sort()) !== JSON.stringify(currentIds.sort())) {
         this.loadApartments();
       }
@@ -321,14 +373,13 @@ export class ApartmentDetailsModalComponent implements OnInit, OnChanges {
   }
 
   loadApartments() {
-    // Chỉ gọi API khi không có apartments data sẵn
-    if (this.apartments && this.apartments.length > 0) {
-      this.displayApartments = this.apartments;
+    if (this.warehouseApartments && this.warehouseApartments.length > 0) {
+      this.displayApartments = this.warehouseApartments;
       return;
     }
     
-    if (this.apartmentIds.length === 0) {
-      this.error = 'No apartment IDs provided';
+    if (this.warehouseApartmentIds.length === 0) {
+      this.error = 'No warehouse apartment IDs provided';
       return;
     }
 
@@ -336,7 +387,7 @@ export class ApartmentDetailsModalComponent implements OnInit, OnChanges {
     this.error = null;
     this.displayApartments = [];
 
-    this.warehouseService.getApartmentsByIds(this.apartmentIds).subscribe({
+    this.warehouseService.getApartmentsByIds(this.warehouseApartmentIds).subscribe({
       next: (response) => {
         this.loading = false;
         if (response.success && response.data.length > 0) {
@@ -357,18 +408,61 @@ export class ApartmentDetailsModalComponent implements OnInit, OnChanges {
     this.close.emit();
   }
 
-  getMessageForApartment(apartment: Apartment): UnprocessedMessage | null {
-    // Tìm message từ results dựa trên apartment_id
-    const result = this.results.find(r => r.apartment_id === apartment.id);
-    if (result) {
-      return this.messages.find(msg => msg.id === result.message_id) || null;
+  /** Chuẩn hóa warehouse_ids (array hoặc chuỗi JSON) thành number[]. */
+  private getMessageWarehouseIds(msg: UnprocessedMessage): number[] {
+    const raw = msg?.warehouse_ids;
+    if (raw == null) return [];
+    if (Array.isArray(raw)) return raw.map(id => Number(id)).filter(n => !Number.isNaN(n));
+    if (typeof raw === 'string') {
+      try {
+        const parsed = JSON.parse(raw);
+        return Array.isArray(parsed) ? parsed.map((id: any) => Number(id)).filter((n: number) => !Number.isNaN(n)) : [];
+      } catch {
+        return [];
+      }
     }
-    // Fallback: tìm từ warehouse_id
-    return this.messages.find(msg => msg.warehouse_id === apartment.id) || null;
+    return [];
+  }
+
+  getMessageForApartment(apartment: Apartment): UnprocessedMessage | null {
+    const result = this.insertResults.find(r => r.apartment_id === apartment.id);
+    if (result) {
+      return this.zaloMessages.find(msg => msg.id === result.message_id) || null;
+    }
+    return this.zaloMessages.find(msg => this.getMessageWarehouseIds(msg).includes(apartment.id)) || null;
   }
 
   getResultForApartment(apartment: Apartment): ProcessResult | null {
-    return this.results.find(r => r.apartment_id === apartment.id) || null;
+    return this.insertResults.find(r => r.apartment_id === apartment.id) || null;
+  }
+
+  approveApartment(apartment: Apartment): void {
+    this.actionLoading = { ...this.actionLoading, [apartment.id]: true };
+    this.warehouseService.updateApartmentDataStatus(apartment.id, 'APPROVED').subscribe({
+      next: (res) => {
+        this.actionLoading = { ...this.actionLoading, [apartment.id]: false };
+        if (res.success) {
+          apartment.data_status = 'APPROVED';
+          this.apartmentUpdated.emit({ apartmentId: apartment.id, action: 'approved' });
+        }
+      },
+      error: () => { this.actionLoading = { ...this.actionLoading, [apartment.id]: false }; }
+    });
+  }
+
+  deleteApartmentItem(apartment: Apartment): void {
+    if (!confirm('Xóa căn này khỏi warehouse?')) return;
+    this.actionLoading = { ...this.actionLoading, [apartment.id]: true };
+    this.warehouseService.deleteApartment(apartment.id).subscribe({
+      next: (res) => {
+        this.actionLoading = { ...this.actionLoading, [apartment.id]: false };
+        if (res.success) {
+          this.displayApartments = this.displayApartments.filter(a => a.id !== apartment.id);
+          this.apartmentUpdated.emit({ apartmentId: apartment.id, action: 'deleted' });
+        }
+      },
+      error: () => { this.actionLoading = { ...this.actionLoading, [apartment.id]: false }; }
+    });
   }
 
   hasAdditionalFields(result: ProcessResult): boolean {
@@ -400,6 +494,11 @@ export class ApartmentDetailsModalComponent implements OnInit, OnChanges {
   formatArea(area: number | undefined): string {
     if (!area) return 'N/A';
     return `${area}m²`;
+  }
+
+  formatBoolean(value: boolean | undefined | null): string {
+    if (value === null || value === undefined) return 'N/A';
+    return value ? 'Có' : 'Không';
   }
 }
 

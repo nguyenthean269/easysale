@@ -68,7 +68,6 @@ CORS(app, resources={
 
 #### **Warehouse API:**
 - ✅ `/warehouse/api/warehouse/apartments/test` (GET)
-- ✅ `/warehouse/api/warehouse/apartments/single-insert` (POST)
 - ✅ `/warehouse/api/warehouse/apartments/batch-insert` (POST)
 
 ### 🔍 **Debug Commands:**
